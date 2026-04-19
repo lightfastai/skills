@@ -1,0 +1,26 @@
+{
+  "skill_name": "spec-creator",
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "create-from-clear-intent",
+      "prompt": "Can you write a SPEC.md for a service we're building called Glacier Tier Manager? It watches S3 buckets and moves old objects to Glacier Deep Archive after policy-defined age thresholds. Polling, not event-driven — we want deterministic cadence. Main components: a Bucket Poller that lists objects on a schedule, a Policy Evaluator that decides which objects are eligible, and a Tiering Executor that issues the storage-class change. External deps: S3 API and per-bucket lifecycle policy files. Not a general-purpose cost optimizer — it only does tiering.",
+      "expected_output": "A SPEC.md at repo root covering Purpose, Problem Statement (with 3 bullets + 'Important boundary' block), Goals + Non-Goals (non-goal should reflect 'not a cost optimizer'), System Overview with the three named components, External Dependencies, and a Core Domain Model. Voice is third-person, fields use the `name` (type) format, obligation keywords are lowercase.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "eval_name": "create-from-unstructured-notes",
+      "prompt": "I have rough notes on a service I want formalized into a SPEC.md. Here's what I have:\n\n- name: Hookshot. it's a webhook retry daemon.\n- retries failed outbound webhooks with exponential backoff\n- keeps state per endpoint (success rate, last attempt)\n- has a per-URL circuit breaker so one broken target doesn't starve others\n- retry schedules configurable per endpoint\n- NOT a general-purpose message queue. teams shouldn't push arbitrary jobs through it\n- reads webhook delivery records from a postgres table called webhook_deliveries\n- marks them delivered or dead-lettered\n\nTurn this into a proper spec.",
+      "expected_output": "A SPEC.md that reorganizes the notes into the template structure: Purpose (one sentence about webhook retry), Problem Statement with bullets, 'Important boundary' + Non-Goals covering the 'not a queue' constraint, Main Components (retry scheduler, circuit breaker, state tracker or equivalent), External Dependencies (postgres), Domain Model with an entity for the delivery record. Notes-style phrasings are rewritten in spec voice.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "eval_name": "update-add-nongoal-and-component",
+      "prompt": "We have an existing SPEC.md at the repo root for Log Shipper. Please update it: add a non-goal stating that cross-region log replication is out of scope, and add a new main component called `Offset Store` that persists per-file read offsets. Keep everything else as-is.",
+      "expected_output": "SPEC.md with the existing sections preserved verbatim except: (1) a new bullet added under Non-Goals covering cross-region replication, phrased as a gerund/noun phrase per the language guide; (2) a new numbered component `Offset Store` added under 3.1 with a verb-led description. Section numbering remains 1, 2, 3; component numbering extends to 4. No first-person pronouns introduced.",
+      "files": ["fixtures/existing_spec.md"]
+    }
+  ]
+}
