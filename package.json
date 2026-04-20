@@ -1,0 +1,15 @@
+{
+  "name": "@lightfastai/skills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "baml:generate:foundation": "npx baml-cli generate --from ./skills/foundation-creator/baml_src",
+    "baml:generate:spec": "npx baml-cli generate --from ./skills/spec-creator/baml_src",
+    "eval:foundation": "node ./scripts/run-baml-eval.mjs foundation-creator",
+    "eval:spec": "node ./scripts/run-baml-eval.mjs spec-creator"
+  },
+  "dependencies": {
+    "@boundaryml/baml": "0.221.0",
+    "typescript": "5.9.3"
+  }
+}

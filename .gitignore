@@ -1,6 +1,7 @@
-.DS_Store
-__pycache__/
-*.py[cod]
-.venv/
-.idea/
-.vscode/
+node_modules/
+skills/foundation-creator/baml_client/
+skills/foundation-creator/baml_client_dist/
+skills/spec-creator/baml_client/
+skills/spec-creator/baml_client_dist/
+skills/foundation-creator/evals/runs/
+skills/spec-creator/evals/runs/

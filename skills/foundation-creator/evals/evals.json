@@ -1,0 +1,26 @@
+{
+  "skill_name": "foundation-creator",
+  "runner_contract": {
+    "type": "baml_pipeline",
+    "packet_type": "FoundationEvalPacket",
+    "compile_brief_function": "CompileFoundationBriefFromPacket",
+    "render_document_function": "RenderFoundationDocumentDraft",
+    "evaluate_document_function": "EvaluateFoundationDocument"
+  },
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "create-foundation-from-vercel-source-packet",
+      "prompt": "Use the source packet in `fixtures/vercel/raw_notes.md` to draft a top-level foundation document for Vercel. Preserve ambiguity where the positioning is in transition. Do not produce a `SPEC.md`, implementation plan, or architecture diagram.",
+      "expected_output": "A top-level foundation document that frames Vercel as a developer cloud/platform company, captures the current tension between `Frontend Cloud` and `AI Cloud`, identifies core surfaces such as deployment workflow, collaboration, security, AI infrastructure, and platform-building, clarifies that Vercel is not just static hosting or general-purpose IaaS, and preserves open questions or strategic bets instead of inventing certainty.",
+      "expected_file": "fixtures/vercel/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/vercel/raw_notes.md",
+        "expected_criteria": "fixtures/vercel/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/vercel/raw_notes.md"
+      ]
+    }
+  ]
+}

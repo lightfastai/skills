@@ -1,5 +1,12 @@
 {
   "skill_name": "spec-creator",
+  "runner_contract": {
+    "type": "baml_pipeline",
+    "packet_type": "SpecEvalPacket",
+    "compile_brief_function": "CompileSpecBriefFromPacket",
+    "render_document_function": "RenderSpecDocumentDraft",
+    "evaluate_document_function": "EvaluateSpecDocument"
+  },
   "evals": [
     {
       "id": 0,
@@ -21,6 +28,18 @@
       "prompt": "We have an existing SPEC.md at the repo root for Log Shipper. Please update it: add a non-goal stating that cross-region log replication is out of scope, and add a new main component called `Offset Store` that persists per-file read offsets. Keep everything else as-is.",
       "expected_output": "SPEC.md with the existing sections preserved verbatim except: (1) a new bullet added under Non-Goals covering cross-region replication, phrased as a gerund/noun phrase per the language guide; (2) a new numbered component `Offset Store` added under 3.1 with a verb-led description. Section numbering remains 1, 2, 3; component numbering extends to 4. No first-person pronouns introduced.",
       "files": ["fixtures/existing_spec.md"]
+    },
+    {
+      "id": 3,
+      "eval_name": "create-from-vercel-mcp-source-packet",
+      "prompt": "Use the source packet in `fixtures/vercel_mcp/raw_notes.md` to write a `SPEC.md` for a service called `Vercel MCP`. Treat it as a long-running remote MCP service, not as a company-level foundation document. Preserve timeline-specific ambiguity where the source packet is in transition, and do not invent write capabilities that the notes do not justify.",
+      "expected_output": "A `SPEC.md` that frames `Vercel MCP` as an OAuth-protected remote MCP service for AI tools, includes a Problem Statement about secure structured access to Vercel docs, projects, deployments, and logs, sets clear goals and non-goals, identifies boundaries around approved clients and official endpoint usage, captures the current beta/read-only tension without pretending the service already has unconstrained write access, and stays behavioral rather than implementation-level.",
+      "expected_file": "fixtures/vercel_mcp/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/vercel_mcp/raw_notes.md",
+        "expected_criteria": "fixtures/vercel_mcp/expected_criteria.md"
+      },
+      "files": ["fixtures/vercel_mcp/raw_notes.md"]
     }
   ]
 }
