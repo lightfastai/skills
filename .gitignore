@@ -1,7 +1,18 @@
 node_modules/
-skills/foundation-creator/baml_client/
-skills/foundation-creator/baml_client_dist/
-skills/spec-creator/baml_client/
-skills/spec-creator/baml_client_dist/
-skills/foundation-creator/evals/runs/
-skills/spec-creator/evals/runs/
+
+# Generated BAML clients
+skills/**/baml_client/
+skills/**/baml_client_dist/
+
+# Local eval outputs
+skills/**/evals/runs/
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Local OS and tooling noise
+.DS_Store
+*.log
+.tmp-baml-client-tsconfig.json

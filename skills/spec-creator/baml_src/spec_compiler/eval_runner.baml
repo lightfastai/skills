@@ -1,6 +1,7 @@
 function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Compile a spec brief from the evaluation packet below.
 
     Task prompt:
@@ -28,6 +29,7 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
 function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Draft a `SPEC.md` from the brief below.
 
     Rules:
@@ -48,6 +50,7 @@ function EvaluateSpecDocument(
 ) -> EvalReport {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Evaluate the candidate `SPEC.md` against the evaluation packet.
 
     Packet:

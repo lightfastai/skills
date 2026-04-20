@@ -163,8 +163,8 @@ async function main() {
     fail(`Skill '${skillName}' does not declare a supported runner_contract.`);
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    fail("OPENAI_API_KEY is required to execute BAML evals with the current client configuration.");
+  if (!process.env.AI_GATEWAY_API_KEY) {
+    fail("AI_GATEWAY_API_KEY is required to execute BAML evals.");
   }
 
   await ensureFreshClient(skillRoot);
@@ -172,17 +172,21 @@ async function main() {
   const { b } = generated;
 
   const packet = await buildPacket(evalEntry, evalsDir, runner.packet_type);
-  const compileFn = b[runner.compile_brief_function];
-  const renderFn = b[runner.render_document_function];
-  const evaluateFn = b[runner.evaluate_document_function];
+  const compileFnName = runner.compile_brief_function;
+  const renderFnName = runner.render_document_function;
+  const evaluateFnName = runner.evaluate_document_function;
 
-  if (!compileFn || !renderFn || !evaluateFn) {
+  if (
+    typeof b[compileFnName] !== "function" ||
+    typeof b[renderFnName] !== "function" ||
+    typeof b[evaluateFnName] !== "function"
+  ) {
     fail(`Generated client is missing one or more runner functions for '${skillName}'.`);
   }
 
-  const brief = await compileFn(packet);
-  const candidateDocument = await renderFn(brief);
-  const report = await evaluateFn(packet, candidateDocument);
+  const brief = await b[compileFnName](packet);
+  const candidateDocument = await b[renderFnName](brief);
+  const report = await b[evaluateFnName](packet, candidateDocument);
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runDir = path.join(skillRoot, "evals", "runs", `${timestamp}-${evalEntry.eval_name}`);

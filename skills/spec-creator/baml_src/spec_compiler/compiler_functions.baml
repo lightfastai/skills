@@ -1,6 +1,7 @@
 function ExtractClaims(raw_notes: string) -> Claim[] {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Extract atomic claims from the raw notes below.
 
     Rules:
@@ -23,6 +24,7 @@ function ExtractClaims(raw_notes: string) -> Claim[] {
 function CompileSpecBrief(raw_notes: string, existing_spec: string?) -> SpecBrief {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Compile a spec brief from the inputs below.
 
     Rules:
@@ -45,6 +47,7 @@ function CompileSpecBrief(raw_notes: string, existing_spec: string?) -> SpecBrie
 function CritiqueSpecBrief(brief: SpecBrief) -> SpecCritique {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Critique the spec brief below.
 
     Rules:
@@ -63,6 +66,7 @@ function CritiqueSpecBrief(brief: SpecBrief) -> SpecCritique {
 function RenderSpecCreatorPrompt(brief: SpecBrief) -> string {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Render a prompt for the `spec-creator` skill using the brief below.
 
     Rules:

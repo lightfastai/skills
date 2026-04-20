@@ -26,13 +26,23 @@ This repo now includes BAML-backed fixture evals for `foundation-creator` and
 `spec-creator`.
 
 ```bash
-npm install
-OPENAI_API_KEY=... npm run eval:foundation -- create-foundation-from-vercel-source-packet
-OPENAI_API_KEY=... npm run eval:spec -- create-from-vercel-mcp-source-packet
+bun install
+bun run eval:foundation -- create-foundation-from-vercel-source-packet
+bun run eval:spec -- create-from-vercel-mcp-source-packet
 ```
 
 Each run writes packet, brief, candidate document, and evaluation report
 artifacts under `skills/<skill>/evals/runs/`.
+
+`bun run eval:*` loads `.env` automatically through `dotenv-cli`, so
+`AI_GATEWAY_API_KEY` can live in the repo-local `.env` without manual
+`source` steps.
+
+For other local commands that should inherit `.env`, use:
+
+```bash
+bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-vercel-source-packet
+```
 
 ## License
 

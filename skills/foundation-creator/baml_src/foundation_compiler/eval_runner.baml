@@ -1,6 +1,7 @@
 function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> FoundationBrief {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Compile a foundation brief from the evaluation packet below.
 
     Task prompt:
@@ -25,6 +26,7 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
 function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Draft a top-level foundation document from the brief below.
 
     Rules:
@@ -44,6 +46,7 @@ function EvaluateFoundationDocument(
 ) -> EvalReport {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Evaluate the candidate foundation document against the evaluation packet.
 
     Packet:

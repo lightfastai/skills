@@ -1,6 +1,7 @@
 function ExtractClaims(raw_notes: string) -> Claim[] {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Extract atomic claims from the raw notes below.
 
     Rules:
@@ -23,6 +24,7 @@ function ExtractClaims(raw_notes: string) -> Claim[] {
 function BuildFoundationKernel(claims: Claim[]) -> FoundationKernel {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Build a stable foundation kernel from the extracted claims below.
 
     Rules:
@@ -41,6 +43,7 @@ function BuildFoundationKernel(claims: Claim[]) -> FoundationKernel {
 function CritiqueFoundationKernel(kernel: FoundationKernel) -> FoundationCritique {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Critique the foundation kernel below.
 
     Rules:
@@ -63,6 +66,7 @@ function CompileFoundationBrief(
 ) -> FoundationBrief {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Compile a concise foundation brief from the kernel and critique below.
 
     Rules:
@@ -84,6 +88,7 @@ function CompileFoundationBrief(
 function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
   client EvalModel
   prompt #"
+    {{ _.role("user") }}
     Render a prompt for the `foundation-creator` skill using the brief below.
 
     Rules:
