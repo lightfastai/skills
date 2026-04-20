@@ -21,6 +21,8 @@ How the foundation document should be worded.
 - Use `#` for the document title: `# <Primitive Name> Foundation`.
 - Use `##` for every major section in `references/template.md`.
 - Keep the section order exactly as the template defines it.
+- In update mode, preserve the existing section order and keep unchanged wording
+  intact unless the requested edit requires a local rewrite.
 - Use bullets for `Core Thesis`, `Boundaries`, `Actor Model`, `Durable Surfaces`,
   `Strategic Bets`, and `Open Questions`.
 - `Open Questions` bullets should be written as actual open questions and usually

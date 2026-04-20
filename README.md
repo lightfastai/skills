@@ -29,6 +29,7 @@ This repo now includes BAML-backed fixture evals for `foundation-creator` and
 bun install
 bun run eval:foundation -- create-foundation-from-vercel-source-packet
 bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
+bun run eval:foundation -- update-lightfast-foundation-boundary-surface-question
 bun run eval:spec -- create-from-vercel-mcp-source-packet
 bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --trials 3
 ```
@@ -42,6 +43,7 @@ Current `foundation-creator` corpus includes:
 - `create-foundation-from-cloudflare-source-packet`
 - `create-foundation-from-lightfast-founder-notes`
 - `create-foundation-from-harbor-care-source-packet`
+- `update-lightfast-foundation-boundary-surface-question`
 
 The runner now also writes:
 

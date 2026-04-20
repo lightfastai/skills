@@ -105,6 +105,59 @@
       "files": [
         "fixtures/harbor_care/raw_notes.md"
       ]
+    },
+    {
+      "id": 4,
+      "eval_name": "update-lightfast-foundation-boundary-surface-question",
+      "scenario_type": "update_existing_doc",
+      "input_shape": "existing_doc_update",
+      "ambiguity_level": "low",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "update_regression",
+        "template_drift",
+        "invented_certainty"
+      ],
+      "prompt": "We have an existing Lightfast foundation document. Please update it in place: add a boundary clarifying that Lightfast is not a hosted control plane or system of record by default, add a durable surface bullet covering versioned evaluation artifacts and run histories, and add an open question about whether repo-native usage remains the center of gravity or shifts toward a hosted system of record. Keep everything else unchanged.",
+      "expected_output": "The existing Lightfast foundation document is preserved verbatim except for three requested additions: (1) a new boundary clarifying that Lightfast is not a hosted control plane or system of record by default; (2) a new durable surface bullet about versioned evaluation artifacts and run histories; and (3) a new open question about repo-native versus hosted center of gravity. No new sections, planning drift, or first-person language are introduced.",
+      "expected_file": "fixtures/lightfast_foundation_update/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "foundation-update-v1",
+        "template_file": "references/template.md",
+        "language_file": "references/language.md",
+        "existing_foundation_file": "evals/fixtures/existing_foundation.md",
+        "required_patterns": [
+          {
+            "id": "hosted_control_plane_boundary_present",
+            "pattern": "not a hosted control plane or system of record",
+            "flags": "i",
+            "details_pass": "Detected the requested hosted-control-plane/system-of-record boundary.",
+            "details_fail": "Did not detect the requested hosted-control-plane/system-of-record boundary."
+          },
+          {
+            "id": "evaluation_artifacts_surface_present",
+            "pattern": "versioned evaluation artifacts and run histor",
+            "flags": "i",
+            "details_pass": "Detected the requested durable-surface bullet about evaluation artifacts and run histories.",
+            "details_fail": "Did not detect the requested durable-surface bullet about evaluation artifacts and run histories."
+          },
+          {
+            "id": "repo_native_vs_hosted_question_present",
+            "pattern": "repo-native usage remain[s]? the center of gravity.*hosted system of record",
+            "flags": "i",
+            "details_pass": "Detected the requested open question about repo-native versus hosted center of gravity.",
+            "details_fail": "Did not detect the requested open question about repo-native versus hosted center of gravity."
+          }
+        ]
+      },
+      "packet_files": {
+        "expected_criteria": "fixtures/lightfast_foundation_update/expected_criteria.md",
+        "existing_foundation": "fixtures/existing_foundation.md"
+      },
+      "files": [
+        "fixtures/existing_foundation.md"
+      ]
     }
   ]
 }

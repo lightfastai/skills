@@ -22,4 +22,5 @@ class FoundationEvalPacket {
   task_prompt string @assert(nonempty_task_prompt, {{ this|length > 0 }})
   raw_notes string @assert(nonempty_raw_notes, {{ this|length > 0 }})
   expected_criteria string @assert(nonempty_expected_criteria, {{ this|length > 0 }})
+  existing_foundation string?
 }

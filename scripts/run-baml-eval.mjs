@@ -192,6 +192,9 @@ async function buildPacket(evalEntry, evalsDir, packetType) {
   const existingSpecPath = packetFiles.existing_spec
     ? path.join(evalsDir, packetFiles.existing_spec)
     : null;
+  const existingFoundationPath = packetFiles.existing_foundation
+    ? path.join(evalsDir, packetFiles.existing_foundation)
+    : null;
 
   const packet = {
     packet_name: evalEntry.eval_name,
@@ -204,6 +207,12 @@ async function buildPacket(evalEntry, evalsDir, packetType) {
 
   if (packetType === "SpecEvalPacket") {
     packet.existing_spec = existingSpecPath ? await loadText(existingSpecPath) : null;
+  }
+
+  if (packetType === "FoundationEvalPacket") {
+    packet.existing_foundation = existingFoundationPath
+      ? await loadText(existingFoundationPath)
+      : null;
   }
 
   return packet;
@@ -327,6 +336,34 @@ function extractFoundationSectionBodies(candidateDocument) {
   };
 }
 
+function extractMarkdownBullets(sectionBody) {
+  const bullets = [];
+  let current = null;
+
+  for (const rawLine of sectionBody.split(/\r?\n/)) {
+    if (/^\s*-\s+/.test(rawLine)) {
+      if (current) {
+        bullets.push(current);
+      }
+      current = normalizeLine(rawLine.replace(/^\s*-\s+/, ""));
+      continue;
+    }
+
+    const line = normalizeLine(rawLine);
+    if (!current || line.length === 0) {
+      continue;
+    }
+
+    current = `${current} ${line}`.trim();
+  }
+
+  if (current) {
+    bullets.push(current);
+  }
+
+  return bullets;
+}
+
 function validateFoundationDocument(candidateDocument, templateText) {
   const requiredSections = extractFoundationTemplateSections(templateText);
   const disallowedHeadings = extractFoundationDisallowedHeadings(templateText);
@@ -383,24 +420,18 @@ function validateFoundationDocument(candidateDocument, templateText) {
   );
   const strategicBetsBody = bodies.get("Strategic Bets") ?? "";
   const openQuestionsBody = bodies.get("Open Questions") ?? "";
-  const openQuestionBullets = openQuestionsBody
-    .split(/\r?\n/)
-    .map((line) => normalizeLine(line))
-    .filter((line) => line.startsWith("- "));
+  const openQuestionBullets = extractMarkdownBullets(openQuestionsBody);
   const openQuestionsLookOpen =
     openQuestionBullets.length > 0 &&
     openQuestionBullets.every((line) => line.endsWith("?"));
-  const strategicBetLines = strategicBetsBody
-    .split(/\r?\n/)
-    .map((line) => normalizeLine(line))
-    .filter((line) => line.startsWith("- "));
+  const strategicBetLines = extractMarkdownBullets(strategicBetsBody);
   const strategicBetsBodyHasDirectionalPreamble = /\b(observed directional bets|public signals)\b/i.test(
     strategicBetsBody,
   );
   const hedgedStrategicBets =
     strategicBetLines.length === 0 ||
     strategicBetLines.every((line) =>
-      /^\-\s+Bet:/i.test(line)
+      /^Bet:/i.test(line)
         ? strategicBetsBodyHasDirectionalPreamble
         : /\b(appears?|suggests?|signals?|signaling|indicates?|indicating|directional bet|directional bets|observed bet|observed bets|a bet that|bet that|bet on)\b/i.test(
             line,
@@ -466,6 +497,41 @@ function validateFoundationDocument(candidateDocument, templateText) {
         ? "No obvious first-person or second-person pronouns detected."
         : "Detected first-person or second-person pronouns that violate the language guide.",
     ),
+  ];
+}
+
+function validateFoundationUpdateDocument(
+  candidateDocument,
+  existingFoundationText,
+  templateText,
+  validationContract,
+) {
+  const baseChecks = validateFoundationDocument(candidateDocument, templateText);
+  const existingLines = extractNonEmptyNormalizedLines(existingFoundationText);
+  const candidateLines = extractNonEmptyNormalizedLines(candidateDocument);
+  const normalizedCandidate = normalizeLine(candidateDocument);
+  const preservesExistingContent = linesAppearInOrder(existingLines, candidateLines);
+  const requiredPatternChecks = (validationContract.required_patterns ?? []).map((patternCheck) => {
+    const expression = new RegExp(patternCheck.pattern, patternCheck.flags ?? "i");
+    const passed = expression.test(normalizedCandidate);
+
+    return createCheck(
+      patternCheck.id,
+      passed,
+      passed ? patternCheck.details_pass : patternCheck.details_fail,
+    );
+  });
+
+  return [
+    ...baseChecks,
+    createCheck(
+      "existing_content_preserved_in_order",
+      preservesExistingContent,
+      preservesExistingContent
+        ? "All non-empty lines from the existing foundation appear in order in the candidate."
+        : "One or more non-empty lines from the existing foundation were removed or reordered.",
+    ),
+    ...requiredPatternChecks,
   ];
 }
 
@@ -650,16 +716,28 @@ async function runDeterministicChecks(skillRoot, validationContract, candidateDo
   const existingSpecPath = validationContract.existing_spec_file
     ? path.join(skillRoot, validationContract.existing_spec_file)
     : null;
-  const [templateText, languageText, existingSpecText] = await Promise.all([
+  const existingFoundationPath = validationContract.existing_foundation_file
+    ? path.join(skillRoot, validationContract.existing_foundation_file)
+    : null;
+  const [templateText, languageText, existingSpecText, existingFoundationText] = await Promise.all([
     validationContract.template_file ? loadText(templatePath) : Promise.resolve(""),
     languagePath ? loadText(languagePath) : Promise.resolve(""),
     existingSpecPath ? loadText(existingSpecPath) : Promise.resolve(""),
+    existingFoundationPath ? loadText(existingFoundationPath) : Promise.resolve(""),
   ]);
 
   let checks;
   switch (validationContract.validator) {
     case "foundation-v1":
       checks = validateFoundationDocument(candidateDocument, templateText, languageText);
+      break;
+    case "foundation-update-v1":
+      checks = validateFoundationUpdateDocument(
+        candidateDocument,
+        existingFoundationText,
+        templateText,
+        validationContract,
+      );
       break;
     case "spec-v1":
       checks = validateSpecDocument(candidateDocument, templateText, languageText);
@@ -712,6 +790,13 @@ async function runSingleTrial({
     brief.update_request = packet.task_prompt;
     if (packet.existing_spec) {
       brief.existing_spec = packet.existing_spec;
+    }
+  }
+
+  if (runner.packet_type === "FoundationEvalPacket") {
+    brief.update_request = packet.task_prompt;
+    if (packet.existing_foundation) {
+      brief.existing_foundation = packet.existing_foundation;
     }
   }
 

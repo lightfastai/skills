@@ -109,6 +109,7 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Avoid implementation detail.
     - Emphasize thesis, boundaries, actor model, surfaces, and strategic bets.
     - State that the writer is a source-bound synthesizer, not a strategy consultant.
+    - If the brief includes `existing_foundation`, treat the task as update mode and preserve the existing document verbatim except for the requested edits.
     - Require markdown output with exactly this heading structure unless the user asks otherwise:
       - `# <Primitive Name> Foundation`
       - `## What This Is`
@@ -125,6 +126,7 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Require recently emerging or transitional surfaces to be qualified explicitly rather than flattened as fully settled.
     - Require `Open Questions` bullets to remain actual unresolved questions rather than disguised conclusions.
     - Forbid market-leadership or superiority claims unless they are explicit in the brief.
+    - In update mode, do not add new sections or broad new framing unless the request explicitly asks for them.
     - Make the prompt directly usable by an agent.
 
     Brief:

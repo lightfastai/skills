@@ -29,4 +29,6 @@ class FoundationBrief {
   surfaces string[]
   strategic_bets string[]
   unresolved_questions string[]
+  update_request string?
+  existing_foundation string?
 }
