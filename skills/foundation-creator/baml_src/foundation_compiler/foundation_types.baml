@@ -15,6 +15,7 @@ class FoundationCritique {
   contradictions string[]
   vague_claims string[]
   implementation_leaks string[]
+  unsupported_inferences string[]
   missing_boundaries string[]
   leverage_questions string[]
 }

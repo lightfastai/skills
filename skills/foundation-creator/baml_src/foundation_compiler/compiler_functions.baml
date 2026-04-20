@@ -13,6 +13,8 @@ function ExtractClaims(raw_notes: string) -> Claim[] {
     - Use `Constraint` for hard operating requirements.
     - Use `OpenQuestion` when the note is unresolved.
     - Keep `sources` short and human-readable.
+    - Do not infer business model, monetization, org structure, metrics, or roadmap items unless explicit in the notes.
+    - Prefer omission over speculation.
 
     Raw notes:
     {{ raw_notes }}
@@ -32,6 +34,8 @@ function BuildFoundationKernel(claims: Claim[]) -> FoundationKernel {
     - Capture durable thesis-level information.
     - Do not invent implementation detail.
     - Use empty lists when a category is not yet supported by the claims.
+    - Do not infer monetization, pricing, KPIs, org structure, GTM strategy, partnership priorities, or execution plans unless explicitly supported.
+    - Prefer a shorter kernel over a speculative one.
 
     Claims:
     {{ claims|format(type="yaml") }}
@@ -50,7 +54,9 @@ function CritiqueFoundationKernel(kernel: FoundationKernel) -> FoundationCritiqu
     - Flag contradictions across thesis, boundaries, and bets.
     - Flag vague claims that should be sharpened before document rendering.
     - Flag implementation leakage.
+    - Flag unsupported inferences that are plausible-sounding but not clearly supported by source material.
     - Flag missing boundaries that create strategic confusion.
+    - Flag consulting-style drift such as metrics, decision agendas, operating plans, or monetization claims.
     - Ask only high-leverage clarification questions.
 
     Kernel:
@@ -74,6 +80,12 @@ function CompileFoundationBrief(
     - Preserve unresolved questions explicitly.
     - Exclude critique items that were already resolved by the kernel.
     - Keep the brief compact and high-signal.
+    - Remove unsupported inferences rather than softening them.
+    - Prefer omission over consultant-style expansion.
+    - Do not add business-model, KPI, org, roadmap, or operating-plan language unless source-backed.
+    - Treat `strategic_bets` as observed directional bets, not recommendations or settled future state.
+    - If a surface is visible but still in transition, preserve that qualification in the surrounding summary or questions.
+    - Avoid market-leadership or competitive-superiority language unless directly supported by source material.
 
     Kernel:
     {{ kernel|format(type="yaml") }}
@@ -96,6 +108,12 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Preserve strategic ambiguity where the brief leaves open questions.
     - Avoid implementation detail.
     - Emphasize thesis, boundaries, actor model, surfaces, and strategic bets.
+    - State that the writer is a source-bound synthesizer, not a strategy consultant.
+    - Require exactly these sections unless the user asks otherwise: `What This Is`, `Core Thesis`, `Boundaries`, `Actor Model`, `Durable Surfaces`, `Strategic Bets`, `Open Questions`.
+    - Forbid extra sections like `Success Signals`, `Metrics`, `Decision Agenda`, `Next Steps`, `Operating Guidance`, or `Roadmap`.
+    - Require `Strategic Bets` to be phrased as observed directional bets rather than prescriptions.
+    - Require recently emerging or transitional surfaces to be qualified explicitly rather than flattened as fully settled.
+    - Forbid market-leadership or superiority claims unless they are explicit in the brief.
     - Make the prompt directly usable by an agent.
 
     Brief:

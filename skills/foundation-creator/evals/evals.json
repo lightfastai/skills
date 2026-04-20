@@ -21,6 +21,20 @@
       "files": [
         "fixtures/vercel/raw_notes.md"
       ]
+    },
+    {
+      "id": 1,
+      "eval_name": "create-foundation-from-cloudflare-source-packet",
+      "prompt": "Use the source packet in `fixtures/cloudflare/raw_notes.md` to draft a top-level foundation document for Cloudflare. Preserve the tension between the connectivity cloud, developer platform, and AI/agents platform framings. Do not produce a `SPEC.md`, implementation plan, or architecture diagram.",
+      "expected_output": "A top-level foundation document that frames Cloudflare as a unified platform spanning security/connectivity, developer infrastructure, and AI surfaces; preserves the tension between `connectivity cloud` and developer/AI platform identities; identifies durable surfaces like network/security control plane, developer runtime, AI infrastructure, and platform-building primitives; clarifies boundaries against generic hyperscaler or single-product framings; and preserves open questions rather than inventing certainty.",
+      "expected_file": "fixtures/cloudflare/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/cloudflare/raw_notes.md",
+        "expected_criteria": "fixtures/cloudflare/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/cloudflare/raw_notes.md"
+      ]
     }
   ]
 }
