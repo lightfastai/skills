@@ -7,6 +7,12 @@
     "render_document_function": "RenderSpecDocumentDraft",
     "evaluate_document_function": "EvaluateSpecDocument"
   },
+  "validation_contract": {
+    "type": "reference_document_checks",
+    "validator": "spec-v1",
+    "template_file": "references/template.md",
+    "language_file": "references/language.md"
+  },
   "evals": [
     {
       "id": 0,

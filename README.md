@@ -29,10 +29,23 @@ This repo now includes BAML-backed fixture evals for `foundation-creator` and
 bun install
 bun run eval:foundation -- create-foundation-from-vercel-source-packet
 bun run eval:spec -- create-from-vercel-mcp-source-packet
+bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --trials 3
 ```
 
 Each run writes packet, brief, candidate document, and evaluation report
 artifacts under `skills/<skill>/evals/runs/`.
+
+The runner now also writes:
+
+- `deterministic_checks.json` — reference-driven checks derived from the skill's
+  `template.md` and `language.md`
+- `timing.json` — per-stage local timing
+- `summary.json` — per-trial LLM status + combined status
+- `benchmark.json` — aggregated status counts and timing summaries across all
+  trials
+
+When `--trials N` is used, the run directory contains `trial-1/`, `trial-2/`,
+... plus a top-level `benchmark.json`.
 
 `bun run eval:*` loads `.env` automatically through `dotenv-cli`, so
 `AI_GATEWAY_API_KEY` can live in the repo-local `.env` without manual
