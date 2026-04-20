@@ -28,12 +28,20 @@ This repo now includes BAML-backed fixture evals for `foundation-creator` and
 ```bash
 bun install
 bun run eval:foundation -- create-foundation-from-vercel-source-packet
+bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
 bun run eval:spec -- create-from-vercel-mcp-source-packet
 bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --trials 3
 ```
 
 Each run writes packet, brief, candidate document, and evaluation report
 artifacts under `skills/<skill>/evals/runs/`.
+
+Current `foundation-creator` corpus includes:
+
+- `create-foundation-from-vercel-source-packet`
+- `create-foundation-from-cloudflare-source-packet`
+- `create-foundation-from-lightfast-founder-notes`
+- `create-foundation-from-harbor-care-source-packet`
 
 The runner now also writes:
 
@@ -43,6 +51,11 @@ The runner now also writes:
 - `summary.json` — per-trial LLM status + combined status
 - `benchmark.json` — aggregated status counts and timing summaries across all
   trials
+
+Eval manifests also carry lightweight taxonomy metadata
+(`scenario_type`, `input_shape`, `ambiguity_level`, `domain_profile`,
+`primary_risks`) so benchmark runs can be grouped by failure mode. Shared
+taxonomy guidance lives in [`evals/TAXONOMY.md`](evals/TAXONOMY.md).
 
 When `--trials N` is used, the run directory contains `trial-1/`, `trial-2/`,
 ... plus a top-level `benchmark.json`.

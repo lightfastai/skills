@@ -27,6 +27,8 @@ class SpecBrief {
   external_dependencies string[]
   entities EntityBrief[]
   unresolved_questions string[]
+  update_request string?
+  existing_spec string?
 }
 
 class SpecCritique {

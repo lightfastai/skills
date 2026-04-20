@@ -1,6 +1,8 @@
 # {Primitive Name} Foundation
 
 Use only the sections below unless the user explicitly asks for more.
+All headings in the final document must use markdown heading syntax exactly as
+shown here.
 
 ## What This Is
 
@@ -28,13 +30,13 @@ Use only the sections below unless the user explicitly asks for more.
 
 ## Strategic Bets
 
-- {Only if clearly supported by the material.}
-- {Use fewer bullets rather than speculative ones.}
+- {The notes suggest a bet on ...}
+- {There are visible signals that ...}
 
 ## Open Questions
 
-- {Unresolved tension or ambiguity the source does not settle.}
-- {Another open question.}
+- {Unresolved tension or ambiguity the source does not settle?}
+- {Another open question?}
 
 ## Disallowed Sections
 

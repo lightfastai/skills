@@ -109,10 +109,21 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Avoid implementation detail.
     - Emphasize thesis, boundaries, actor model, surfaces, and strategic bets.
     - State that the writer is a source-bound synthesizer, not a strategy consultant.
-    - Require exactly these sections unless the user asks otherwise: `What This Is`, `Core Thesis`, `Boundaries`, `Actor Model`, `Durable Surfaces`, `Strategic Bets`, `Open Questions`.
+    - Require markdown output with exactly this heading structure unless the user asks otherwise:
+      - `# <Primitive Name> Foundation`
+      - `## What This Is`
+      - `## Core Thesis`
+      - `## Boundaries`
+      - `## Actor Model`
+      - `## Durable Surfaces`
+      - `## Strategic Bets`
+      - `## Open Questions`
     - Forbid extra sections like `Success Signals`, `Metrics`, `Decision Agenda`, `Next Steps`, `Operating Guidance`, or `Roadmap`.
-    - Require `Strategic Bets` to be phrased as observed directional bets rather than prescriptions.
+    - Require `Strategic Bets` to be phrased as observed directional bets or public signals rather than prescriptions.
+    - Require each `Strategic Bets` bullet to start with explicit hedge language such as `The notes suggest a bet on...`, `There are visible signals that...`, or `The company appears to be betting on...`.
+    - Forbid bare `Bet:` labels and categorical claims like `X is the wedge` or `Y is a defensible primitive`.
     - Require recently emerging or transitional surfaces to be qualified explicitly rather than flattened as fully settled.
+    - Require `Open Questions` bullets to remain actual unresolved questions rather than disguised conclusions.
     - Forbid market-leadership or superiority claims unless they are explicit in the brief.
     - Make the prompt directly usable by an agent.
 

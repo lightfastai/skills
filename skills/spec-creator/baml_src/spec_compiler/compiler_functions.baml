@@ -73,6 +73,28 @@ function RenderSpecCreatorPrompt(brief: SpecBrief) -> string {
     - Ask for a top-level `SPEC.md`.
     - Keep the output language-agnostic and behavioral.
     - Preserve unresolved questions instead of inventing decisions.
+    - If the brief includes `existing_spec`, treat the task as update mode and preserve the existing document verbatim except for the requested edits.
+    - Require the canonical `spec-creator` section shape:
+      - `# <Service Name> Specification`
+      - `Status: Draft v1 (language-agnostic)`
+      - `Purpose: <one sentence>`
+      - `## 1. Problem Statement`
+      - `## 2. Goals and Non-Goals`
+      - `### 2.1 Goals`
+      - `### 2.2 Non-Goals`
+      - `## 3. System Overview`
+      - `### 3.1 Main Components`
+      - `### 3.2 External Dependencies`
+      - `## 4. Core Domain Model`
+      - `### 4.1 Entities`
+    - Require `## 1. Problem Statement` to contain:
+      - one opening paragraph
+      - a line like `The service solves <N> operational problems:`
+      - a bullet list of explicit operational problems
+    - Require `Important boundary:` as a labeled block inside the Problem Statement.
+    - Require numbered components and template-shaped field lines: `- `field_name` (type, constraints)`.
+    - Require external dependencies to stay at the system/service level rather than naming low-level API methods or SDK calls.
+    - In update mode, do not add new top-level sections or template-completion material unless the request explicitly asks for them.
     - Emphasize problem statement, goals, non-goals, components, dependencies, and entities.
     - Make the prompt directly usable by an agent.
 

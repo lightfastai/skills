@@ -17,6 +17,15 @@
     {
       "id": 0,
       "eval_name": "create-foundation-from-vercel-source-packet",
+      "scenario_type": "source_packet_transition",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "invented_certainty",
+        "scope_bleed",
+        "weak_boundaries"
+      ],
       "prompt": "Use the source packet in `fixtures/vercel/raw_notes.md` to draft a top-level foundation document for Vercel. Preserve ambiguity where the positioning is in transition. Do not produce a `SPEC.md`, implementation plan, or architecture diagram.",
       "expected_output": "A top-level foundation document that frames Vercel as a developer cloud/platform company, captures the current tension between `Frontend Cloud` and `AI Cloud`, identifies core surfaces such as deployment workflow, collaboration, security, AI infrastructure, and platform-building, clarifies that Vercel is not just static hosting or general-purpose IaaS, and preserves open questions or strategic bets instead of inventing certainty.",
       "expected_file": "fixtures/vercel/expected_criteria.md",
@@ -31,6 +40,15 @@
     {
       "id": 1,
       "eval_name": "create-foundation-from-cloudflare-source-packet",
+      "scenario_type": "source_packet_transition",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "invented_certainty",
+        "scope_bleed",
+        "weak_boundaries"
+      ],
       "prompt": "Use the source packet in `fixtures/cloudflare/raw_notes.md` to draft a top-level foundation document for Cloudflare. Preserve the tension between the connectivity cloud, developer platform, and AI/agents platform framings. Do not produce a `SPEC.md`, implementation plan, or architecture diagram.",
       "expected_output": "A top-level foundation document that frames Cloudflare as a unified platform spanning security/connectivity, developer infrastructure, and AI surfaces; preserves the tension between `connectivity cloud` and developer/AI platform identities; identifies durable surfaces like network/security control plane, developer runtime, AI infrastructure, and platform-building primitives; clarifies boundaries against generic hyperscaler or single-product framings; and preserves open questions rather than inventing certainty.",
       "expected_file": "fixtures/cloudflare/expected_criteria.md",
@@ -40,6 +58,52 @@
       },
       "files": [
         "fixtures/cloudflare/raw_notes.md"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "create-foundation-from-lightfast-founder-notes",
+      "scenario_type": "founder_notes_ambiguity",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "invented_certainty",
+        "scope_bleed",
+        "weak_boundaries"
+      ],
+      "prompt": "Use the source packet in `fixtures/lightfast_founder_notes/raw_notes.md` to draft a top-level foundation document for Lightfast. Preserve unresolved framing tension. Do not produce a `SPEC.md`, implementation plan, org design, or business strategy memo.",
+      "expected_output": "A top-level foundation document that frames Lightfast as a durable artifact/constraint layer for agent work, preserves the tension between installable skills, compiler/eval/document substrate, and a broader operating layer for durable agent work, identifies surfaces like skill packages, document artifacts, typed contracts, evals, and possible discovery/distribution, clarifies boundaries against chat wrappers, no-code automation, agencies, and fully autonomous company-in-a-box framings, and keeps open questions unresolved instead of inventing certainty.",
+      "expected_file": "fixtures/lightfast_founder_notes/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/lightfast_founder_notes/raw_notes.md",
+        "expected_criteria": "fixtures/lightfast_founder_notes/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/lightfast_founder_notes/raw_notes.md"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "create-foundation-from-harbor-care-source-packet",
+      "scenario_type": "cross_domain_generalization",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "non_developer_domain",
+      "primary_risks": [
+        "source_overfitting",
+        "invented_certainty",
+        "weak_boundaries"
+      ],
+      "prompt": "Use the source packet in `fixtures/harbor_care/raw_notes.md` to draft a top-level foundation document for Harbor Care. Treat it as a trust-heavy care navigation and coordination primitive, not a developer platform. Preserve unresolved framing tension and do not invent clinical authority, business strategy, or implementation detail.",
+      "expected_output": "A top-level foundation document that frames Harbor Care as a care navigation or coordination primitive, preserves the tension between shared longitudinal care picture, coordination operating layer, and benefits/logistics interpreter framings, identifies durable surfaces like intake, shared timeline, coordination, handoffs, and benefits interpretation, clarifies boundaries against telehealth, insurance, EHR, and clinician marketplace framings, and keeps open questions about automation, sponsor shape, and clinical boundary unresolved.",
+      "expected_file": "fixtures/harbor_care/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/harbor_care/raw_notes.md",
+        "expected_criteria": "fixtures/harbor_care/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/harbor_care/raw_notes.md"
       ]
     }
   ]

@@ -19,6 +19,11 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
     - Treat expected criteria as evaluation guidance, not as license to invent.
     - Avoid implementation detail.
     - Do not infer monetization, metrics, org structure, GTM strategy, or operating plans unless the packet explicitly supports them.
+    - If `strategic_bets` are included, phrase them as observed directional signals or evidence.
+    - Each `strategic_bets` item should start with explicit hedge language such as `The notes suggest a bet on...`, `There are visible signals that...`, or `The company appears to be betting on...`.
+    - Do not use bare `Bet:` labels or categorical claims like `X is the wedge` or `Y is a defensible primitive`.
+    - Keep `strategic_bets` short when evidence is weak.
+    - Keep unresolved questions as actual unresolved questions rather than quietly resolving them in the summary.
     - Prefer omission over speculation.
 
     {{ ctx.output_format }}
@@ -38,10 +43,22 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
     - Avoid implementation detail.
     - Stay source-bound: do not invent monetization, KPIs, org structure, partnerships, operating guidance, or next-step plans.
     - Prefer omission over plausible-sounding speculation.
-    - Use exactly these sections and no others: `What This Is`, `Core Thesis`, `Boundaries`, `Actor Model`, `Durable Surfaces`, `Strategic Bets`, `Open Questions`.
+    - Return markdown.
+    - Start with `# <Primitive Name> Foundation`.
+    - Use exactly these `##` sections and no others:
+      - `## What This Is`
+      - `## Core Thesis`
+      - `## Boundaries`
+      - `## Actor Model`
+      - `## Durable Surfaces`
+      - `## Strategic Bets`
+      - `## Open Questions`
     - If `Strategic Bets` is weakly supported, keep it short rather than expanding it.
-    - Phrase `Strategic Bets` as observed directional bets, not recommendations or settled future state.
+    - Phrase `Strategic Bets` as observed directional bets or public signals, not recommendations or settled future state.
+    - Each `Strategic Bets` bullet must start with explicit hedge language such as `The notes suggest a bet on...`, `There are visible signals that...`, or `The company appears to be betting on...`.
+    - Do not use bare `Bet:` labels or categorical statements like `X is the wedge` or `Y is a defensible primitive`.
     - When a surface is visible but still evolving in the packet, qualify it explicitly as emerging, evolving, or unsettled.
+    - Write `Open Questions` as actual unresolved questions, typically ending with `?`.
     - Do not use market-leadership or competitive-superiority language unless the packet explicitly supports it.
 
     Brief:
@@ -70,8 +87,10 @@ function EvaluateFoundationDocument(
     - Penalize invented certainty, invented capabilities, or implementation leakage.
     - Penalize unsupported business-model, monetization, KPI, org, partnership, or operating-plan language.
     - Penalize consulting-style sections such as `Success Signals`, `Metrics`, `Decision Agenda`, `Next Steps`, `Operating Guidance`, or similar drift.
+    - Penalize missing markdown heading structure if the document drifts from the required template shape.
     - Penalize `Strategic Bets` phrased as recommendations or settled conclusions when the packet only supports directional evidence.
     - Penalize flattening transitional surfaces as fully settled if the packet presents them as evolving.
+    - Penalize `Open Questions` that silently resolve ambiguity instead of keeping it open.
     - Penalize market-leadership or competitive-superiority claims not explicitly supported by the packet.
     - Use `Pass`, `Partial`, or `Fail` for each criterion.
 

@@ -29,6 +29,10 @@ function normalizeHeading(line) {
     .trim();
 }
 
+function stripLeadingSectionNumber(heading) {
+  return heading.replace(/^\d+(?:\.\d+)*\.?\s+/, "").trim();
+}
+
 function summarizeNumeric(values) {
   if (values.length === 0) {
     return {
@@ -61,6 +65,28 @@ function hasPronounDrift(document) {
 
 function hasUppercaseObligationKeyword(document) {
   return /\b(MUST|SHOULD|MAY)\b/.test(document);
+}
+
+function extractNonEmptyNormalizedLines(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => normalizeLine(line))
+    .filter((line) => line.length > 0);
+}
+
+function linesAppearInOrder(needleLines, haystackLines) {
+  let needleIndex = 0;
+
+  for (const line of haystackLines) {
+    if (needleIndex >= needleLines.length) {
+      break;
+    }
+    if (line === needleLines[needleIndex]) {
+      needleIndex += 1;
+    }
+  }
+
+  return needleIndex === needleLines.length;
 }
 
 function runCommand(command, args, cwd) {
@@ -170,8 +196,10 @@ async function buildPacket(evalEntry, evalsDir, packetType) {
   const packet = {
     packet_name: evalEntry.eval_name,
     task_prompt: evalEntry.prompt,
-    raw_notes: rawNotesPath ? await loadText(rawNotesPath) : "",
-    expected_criteria: expectedCriteriaPath ? await loadText(expectedCriteriaPath) : "",
+    raw_notes: rawNotesPath ? await loadText(rawNotesPath) : evalEntry.prompt,
+    expected_criteria: expectedCriteriaPath
+      ? await loadText(expectedCriteriaPath)
+      : (evalEntry.expected_output ?? ""),
   };
 
   if (packetType === "SpecEvalPacket") {
@@ -269,17 +297,46 @@ function extractFoundationDisallowedHeadings(templateText) {
   return disallowed;
 }
 
+function extractFoundationSectionBodies(candidateDocument) {
+  const lines = candidateDocument.split(/\r?\n/);
+  const sections = [];
+
+  for (const [index, rawLine] of lines.entries()) {
+    const match = rawLine.match(/^\s*##\s+(.+?)\s*$/);
+    if (match) {
+      sections.push({
+        title: normalizeLine(match[1]),
+        index,
+      });
+    }
+  }
+
+  const bodies = new Map();
+  for (let index = 0; index < sections.length; index += 1) {
+    const current = sections[index];
+    const next = sections[index + 1];
+    const start = current.index + 1;
+    const end = next ? next.index : lines.length;
+    bodies.set(current.title, lines.slice(start, end).join("\n").trim());
+  }
+
+  return {
+    lines,
+    sections,
+    bodies,
+  };
+}
+
 function validateFoundationDocument(candidateDocument, templateText) {
   const requiredSections = extractFoundationTemplateSections(templateText);
   const disallowedHeadings = extractFoundationDisallowedHeadings(templateText);
-  const lines = candidateDocument.split(/\r?\n/);
+  const { lines, sections, bodies } = extractFoundationSectionBodies(candidateDocument);
+  const titleLine = lines.find((line) => normalizeLine(line).length > 0) ?? "";
+  const hasMarkdownTitle = /^\s*#\s+.+\s+Foundation\s*$/.test(titleLine);
   const lineMap = new Map();
 
-  for (const [index, rawLine] of lines.entries()) {
-    const line = normalizeHeading(rawLine);
-    if (!line) {
-      continue;
-    }
+  for (const { title, index } of sections) {
+    const line = normalizeLine(title);
     if (!lineMap.has(line)) {
       lineMap.set(line, []);
     }
@@ -315,10 +372,7 @@ function validateFoundationDocument(candidateDocument, templateText) {
   const emptySections = [];
   for (let index = 0; index < positions.length; index += 1) {
     const current = positions[index];
-    const next = positions[index + 1];
-    const start = current.index + 1;
-    const end = next ? next.index : lines.length;
-    const sectionBody = lines.slice(start, end).join("\n").trim();
+    const sectionBody = bodies.get(current.section) ?? "";
     if (!sectionBody) {
       emptySections.push(current.section);
     }
@@ -327,8 +381,40 @@ function validateFoundationDocument(candidateDocument, templateText) {
   const presentDisallowedSections = [...disallowedHeadings].filter((section) =>
     (lineMap.get(section) ?? []).length > 0,
   );
+  const strategicBetsBody = bodies.get("Strategic Bets") ?? "";
+  const openQuestionsBody = bodies.get("Open Questions") ?? "";
+  const openQuestionBullets = openQuestionsBody
+    .split(/\r?\n/)
+    .map((line) => normalizeLine(line))
+    .filter((line) => line.startsWith("- "));
+  const openQuestionsLookOpen =
+    openQuestionBullets.length > 0 &&
+    openQuestionBullets.every((line) => line.endsWith("?"));
+  const strategicBetLines = strategicBetsBody
+    .split(/\r?\n/)
+    .map((line) => normalizeLine(line))
+    .filter((line) => line.startsWith("- "));
+  const strategicBetsBodyHasDirectionalPreamble = /\b(observed directional bets|public signals)\b/i.test(
+    strategicBetsBody,
+  );
+  const hedgedStrategicBets =
+    strategicBetLines.length === 0 ||
+    strategicBetLines.every((line) =>
+      /^\-\s+Bet:/i.test(line)
+        ? strategicBetsBodyHasDirectionalPreamble
+        : /\b(appears?|suggests?|signals?|signaling|indicates?|indicating|directional bet|directional bets|observed bet|observed bets|a bet that|bet that|bet on)\b/i.test(
+            line,
+          ),
+    );
 
   return [
+    createCheck(
+      "title_heading_present",
+      hasMarkdownTitle,
+      hasMarkdownTitle
+        ? "Detected the required markdown title heading."
+        : "Missing required title heading like `# <Primitive Name> Foundation`.",
+    ),
     createCheck(
       "required_sections_present_once",
       missingSections.length === 0 && duplicateSections.length === 0,
@@ -358,6 +444,20 @@ function validateFoundationDocument(candidateDocument, templateText) {
       presentDisallowedSections.length === 0
         ? "No disallowed downstream-planning sections were detected."
         : `Disallowed sections present: ${presentDisallowedSections.join(", ")}.`,
+    ),
+    createCheck(
+      "strategic_bets_use_directional_language",
+      hedgedStrategicBets,
+      hedgedStrategicBets
+        ? "Strategic Bets are framed as directional bets or observed signals."
+        : "One or more Strategic Bets bullets read as settled conclusions instead of directional bets or observed signals.",
+    ),
+    createCheck(
+      "open_questions_remain_questions",
+      openQuestionsLookOpen,
+      openQuestionsLookOpen
+        ? "Open Questions are written as explicit unanswered questions."
+        : "Open Questions should be bullet questions that remain open and usually end with `?`.",
     ),
     createCheck(
       "no_first_or_second_person",
@@ -392,14 +492,20 @@ function validateSpecDocument(candidateDocument, templateText) {
   const requiredSections = extractSpecMajorSections(templateText);
   const lines = candidateDocument.split(/\r?\n/);
   const missingSections = requiredSections.filter(
-    (section) => !lineExists(lines, (line) => line.toLowerCase() === section.toLowerCase()),
+    (section) =>
+      !lineExists(
+        lines,
+        (line) => stripLeadingSectionNumber(line).toLowerCase() === section.toLowerCase(),
+      ),
   );
 
-  const hasPurpose = lineExists(lines, (line) => line === "Purpose");
-  const hasProblemStatement = lineExists(
-    lines,
-    (line) => line.toLowerCase() === "problem statement",
-  );
+  const hasStatusLine = lines.some((line) => /^\s*Status:\s+\S+/.test(line));
+  const hasPurposeLine = lines.some((line) => /^\s*Purpose:\s+\S+/.test(line));
+  const hasProblemStatement = lineExists(lines, (line) => line === "1. Problem Statement");
+  const hasGoalSubsections =
+    lineExists(lines, (line) => line === "2.1 Goals") &&
+    lineExists(lines, (line) => line === "2.2 Non-Goals");
+  const hasImportantBoundaryBlock = /(^|\n)Important boundary:\s*\n/m.test(candidateDocument);
   const hasNumberedComponents = /^\d+\.\s+`[^`]+`/m.test(candidateDocument);
   const hasFieldFormatting = /- `[^`]+` \([^)]+\)/.test(candidateDocument);
 
@@ -412,18 +518,39 @@ function validateSpecDocument(candidateDocument, templateText) {
         : `Missing major sections: ${missingSections.join(", ")}.`,
     ),
     createCheck(
-      "purpose_heading_present",
-      hasPurpose,
-      hasPurpose
-        ? "Purpose heading is present."
-        : "Purpose heading is missing.",
+      "status_line_present",
+      hasStatusLine,
+      hasStatusLine
+        ? "Status line is present."
+        : "Status line is missing or malformed.",
+    ),
+    createCheck(
+      "purpose_line_present",
+      hasPurposeLine,
+      hasPurposeLine
+        ? "Purpose line is present."
+        : "Purpose line is missing or malformed.",
     ),
     createCheck(
       "problem_statement_present",
       hasProblemStatement,
       hasProblemStatement
-        ? "Problem Statement heading is present."
-        : "Problem Statement heading is missing.",
+        ? "Problem Statement major section is present."
+        : "Problem Statement major section is missing.",
+    ),
+    createCheck(
+      "goals_subsections_present",
+      hasGoalSubsections,
+      hasGoalSubsections
+        ? "Detected `2.1 Goals` and `2.2 Non-Goals` subsections."
+        : "Missing one or both of the required goals subsections: `2.1 Goals`, `2.2 Non-Goals`.",
+    ),
+    createCheck(
+      "important_boundary_block_present",
+      hasImportantBoundaryBlock,
+      hasImportantBoundaryBlock
+        ? "Detected an `Important boundary:` block inside the document."
+        : "Did not detect the required `Important boundary:` block.",
     ),
     createCheck(
       "component_list_uses_numbering",
@@ -456,6 +583,55 @@ function validateSpecDocument(candidateDocument, templateText) {
   ];
 }
 
+function validateSpecUpdateDocument(candidateDocument, existingSpecText) {
+  const existingLines = extractNonEmptyNormalizedLines(existingSpecText);
+  const candidateLines = extractNonEmptyNormalizedLines(candidateDocument);
+  const preservesExistingContent = linesAppearInOrder(existingLines, candidateLines);
+  const hasOffsetStoreComponent = /^\s*4\.\s+`Offset Store`/m.test(candidateDocument);
+  const hasCrossRegionNonGoal =
+    /(^|\n)-\s+(Cross-region log replication\.|Replicating logs across regions\.)/mi.test(
+      candidateDocument,
+    );
+
+  return [
+    createCheck(
+      "existing_content_preserved_in_order",
+      preservesExistingContent,
+      preservesExistingContent
+        ? "All non-empty lines from the existing spec appear in order in the candidate."
+        : "One or more non-empty lines from the existing spec were removed or reordered.",
+    ),
+    createCheck(
+      "offset_store_component_present",
+      hasOffsetStoreComponent,
+      hasOffsetStoreComponent
+        ? "Detected numbered component `4. `Offset Store``."
+        : "Did not detect numbered component `4. `Offset Store``.",
+    ),
+    createCheck(
+      "cross_region_nongoal_present",
+      hasCrossRegionNonGoal,
+      hasCrossRegionNonGoal
+        ? "Detected the requested cross-region replication non-goal."
+        : "Did not detect the requested cross-region replication non-goal.",
+    ),
+    createCheck(
+      "no_first_or_second_person",
+      !hasPronounDrift(candidateDocument),
+      !hasPronounDrift(candidateDocument)
+        ? "No obvious first-person or second-person pronouns detected."
+        : "Detected first-person or second-person pronouns that violate the language guide.",
+    ),
+    createCheck(
+      "obligation_keywords_lowercase",
+      !hasUppercaseObligationKeyword(candidateDocument),
+      !hasUppercaseObligationKeyword(candidateDocument)
+        ? "No uppercase obligation keywords detected."
+        : "Detected uppercase MUST/SHOULD/MAY, which violates the language guide.",
+    ),
+  ];
+}
+
 async function runDeterministicChecks(skillRoot, validationContract, candidateDocument) {
   if (!validationContract || validationContract.type !== "reference_document_checks") {
     return {
@@ -465,11 +641,19 @@ async function runDeterministicChecks(skillRoot, validationContract, candidateDo
     };
   }
 
-  const templatePath = path.join(skillRoot, validationContract.template_file);
-  const languagePath = path.join(skillRoot, validationContract.language_file);
-  const [templateText, languageText] = await Promise.all([
-    loadText(templatePath),
-    loadText(languagePath),
+  const templatePath = validationContract.template_file
+    ? path.join(skillRoot, validationContract.template_file)
+    : null;
+  const languagePath = validationContract.language_file
+    ? path.join(skillRoot, validationContract.language_file)
+    : null;
+  const existingSpecPath = validationContract.existing_spec_file
+    ? path.join(skillRoot, validationContract.existing_spec_file)
+    : null;
+  const [templateText, languageText, existingSpecText] = await Promise.all([
+    validationContract.template_file ? loadText(templatePath) : Promise.resolve(""),
+    languagePath ? loadText(languagePath) : Promise.resolve(""),
+    existingSpecPath ? loadText(existingSpecPath) : Promise.resolve(""),
   ]);
 
   let checks;
@@ -479,6 +663,9 @@ async function runDeterministicChecks(skillRoot, validationContract, candidateDo
       break;
     case "spec-v1":
       checks = validateSpecDocument(candidateDocument, templateText, languageText);
+      break;
+    case "spec-update-v1":
+      checks = validateSpecUpdateDocument(candidateDocument, existingSpecText, languageText);
       break;
     default:
       fail(`Unknown validation contract '${validationContract.validator}'.`);
@@ -520,6 +707,13 @@ async function runSingleTrial({
   const compileStartedAt = Date.now();
   const brief = await b[compileFnName](packet);
   timing.compile_ms = Date.now() - compileStartedAt;
+
+  if (runner.packet_type === "SpecEvalPacket") {
+    brief.update_request = packet.task_prompt;
+    if (packet.existing_spec) {
+      brief.existing_spec = packet.existing_spec;
+    }
+  }
 
   const renderStartedAt = Date.now();
   const candidateDocument = await b[renderFnName](brief);
@@ -621,6 +815,22 @@ function buildBenchmark(skillName, evalName, trials) {
   };
 }
 
+function extractEvalMetadata(evalEntry) {
+  const fields = [
+    "scenario_type",
+    "input_shape",
+    "ambiguity_level",
+    "domain_profile",
+    "primary_risks",
+  ];
+
+  return Object.fromEntries(
+    fields
+      .filter((field) => evalEntry[field] !== undefined)
+      .map((field) => [field, evalEntry[field]]),
+  );
+}
+
 async function main() {
   const { skillName, selector, trials } = parseArgs(process.argv.slice(2));
 
@@ -636,7 +846,7 @@ async function main() {
   const manifest = await loadJson(manifestPath);
   const evalEntry = getEvalBySelector(manifest.evals, selector);
   const runner = manifest.runner_contract;
-  const validationContract = manifest.validation_contract ?? null;
+  const validationContract = evalEntry.validation_contract ?? manifest.validation_contract ?? null;
 
   if (!runner || runner.type !== "baml_pipeline") {
     fail(`Skill '${skillName}' does not declare a supported runner_contract.`);
@@ -680,7 +890,10 @@ async function main() {
     }
   }
 
-  const benchmark = buildBenchmark(skillName, evalEntry.eval_name, trialResults);
+  const benchmark = {
+    ...buildBenchmark(skillName, evalEntry.eval_name, trialResults),
+    eval_metadata: extractEvalMetadata(evalEntry),
+  };
   await writeRunArtifacts(runDir, {
     "benchmark.json": benchmark,
   });
