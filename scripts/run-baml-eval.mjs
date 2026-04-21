@@ -266,6 +266,38 @@ function createCheck(id, passed, details) {
   return { id, passed, details };
 }
 
+function compilePatternSpec(patternSpec) {
+  if (typeof patternSpec === "string") {
+    return new RegExp(patternSpec, "i");
+  }
+
+  return new RegExp(patternSpec.pattern, patternSpec.flags ?? "i");
+}
+
+function filterLinesByPatternSpecs(lines, patternSpecs = []) {
+  if (patternSpecs.length === 0) {
+    return lines;
+  }
+
+  return lines.filter((line) =>
+    !patternSpecs.some((patternSpec) => compilePatternSpec(patternSpec).test(line)),
+  );
+}
+
+function createPatternChecks(normalizedCandidate, patternChecks = [], expectedPresence = true) {
+  return patternChecks.map((patternCheck) => {
+    const expression = compilePatternSpec(patternCheck);
+    const matched = expression.test(normalizedCandidate);
+    const passed = expectedPresence ? matched : !matched;
+
+    return createCheck(
+      patternCheck.id,
+      passed,
+      passed ? patternCheck.details_pass : patternCheck.details_fail,
+    );
+  });
+}
+
 function extractFoundationTemplateSections(templateText) {
   const sections = [];
   const lines = templateText.split(/\r?\n/);
@@ -364,6 +396,49 @@ function extractMarkdownBullets(sectionBody) {
   return bullets;
 }
 
+function extractNormalizedMarkdownBlocks(text) {
+  const blocks = [];
+  let current = null;
+
+  function flush() {
+    if (current && normalizeLine(current).length > 0) {
+      blocks.push(normalizeLine(current));
+    }
+    current = null;
+  }
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+
+    if (trimmed.length === 0) {
+      flush();
+      continue;
+    }
+
+    if (/^\s*#+\s+/.test(rawLine)) {
+      flush();
+      blocks.push(normalizeLine(rawLine));
+      continue;
+    }
+
+    if (/^\s*-\s+/.test(rawLine)) {
+      flush();
+      current = rawLine.replace(/^\s*-\s+/, "- ");
+      continue;
+    }
+
+    if (current) {
+      current = `${current} ${trimmed}`.trim();
+      continue;
+    }
+
+    current = trimmed;
+  }
+
+  flush();
+  return blocks;
+}
+
 function validateFoundationDocument(candidateDocument, templateText) {
   const requiredSections = extractFoundationTemplateSections(templateText);
   const disallowedHeadings = extractFoundationDisallowedHeadings(templateText);
@@ -433,7 +508,7 @@ function validateFoundationDocument(candidateDocument, templateText) {
     strategicBetLines.every((line) =>
       /^Bet:/i.test(line)
         ? strategicBetsBodyHasDirectionalPreamble
-        : /\b(appears?|suggests?|signals?|signaling|indicates?|indicating|directional bet|directional bets|observed bet|observed bets|a bet that|bet that|bet on)\b/i.test(
+        : /\b(appears?|suggests?|signals?|signaling|indicates?|indicating|indications?|directional bet|directional bets|observed bet|observed bets|a bet that|bet that|bet on)\b/i.test(
             line,
           ),
     );
@@ -507,20 +582,24 @@ function validateFoundationUpdateDocument(
   validationContract,
 ) {
   const baseChecks = validateFoundationDocument(candidateDocument, templateText);
-  const existingLines = extractNonEmptyNormalizedLines(existingFoundationText);
-  const candidateLines = extractNonEmptyNormalizedLines(candidateDocument);
+  const existingBlocks = extractNormalizedMarkdownBlocks(existingFoundationText);
+  const candidateBlocks = extractNormalizedMarkdownBlocks(candidateDocument);
   const normalizedCandidate = normalizeLine(candidateDocument);
-  const preservesExistingContent = linesAppearInOrder(existingLines, candidateLines);
-  const requiredPatternChecks = (validationContract.required_patterns ?? []).map((patternCheck) => {
-    const expression = new RegExp(patternCheck.pattern, patternCheck.flags ?? "i");
-    const passed = expression.test(normalizedCandidate);
-
-    return createCheck(
-      patternCheck.id,
-      passed,
-      passed ? patternCheck.details_pass : patternCheck.details_fail,
-    );
-  });
+  const preservedExistingBlocks = filterLinesByPatternSpecs(
+    existingBlocks,
+    validationContract.allowed_removed_patterns ?? [],
+  );
+  const preservesExistingContent = linesAppearInOrder(preservedExistingBlocks, candidateBlocks);
+  const requiredPatternChecks = createPatternChecks(
+    normalizedCandidate,
+    validationContract.required_patterns ?? [],
+    true,
+  );
+  const forbiddenPatternChecks = createPatternChecks(
+    normalizedCandidate,
+    validationContract.forbidden_patterns ?? [],
+    false,
+  );
 
   return [
     ...baseChecks,
@@ -528,10 +607,11 @@ function validateFoundationUpdateDocument(
       "existing_content_preserved_in_order",
       preservesExistingContent,
       preservesExistingContent
-        ? "All non-empty lines from the existing foundation appear in order in the candidate."
-        : "One or more non-empty lines from the existing foundation were removed or reordered.",
+        ? "All existing markdown blocks appear in order in the candidate, except blocks explicitly marked as replaceable."
+        : "One or more existing markdown blocks were removed or reordered outside the explicitly replaceable blocks.",
     ),
     ...requiredPatternChecks,
+    ...forbiddenPatternChecks,
   ];
 }
 

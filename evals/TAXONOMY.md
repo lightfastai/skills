@@ -74,8 +74,6 @@ values:
 
 The next missing slices are:
 
-- a second `update_existing_doc` packet for `foundation-creator` that requires
-  replacing or tightening existing language rather than additive edits only
 - baseline comparison runs (`current skill` vs `previous skill` / `no skill`)
   when the local harness is ready to compare deltas directly
 - optional Braintrust-style scorer/export integration if local JSON artifacts are

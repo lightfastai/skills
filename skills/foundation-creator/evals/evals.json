@@ -158,6 +158,126 @@
       "files": [
         "fixtures/existing_foundation.md"
       ]
+    },
+    {
+      "id": 5,
+      "eval_name": "update-lightfast-foundation-tighten-overreach",
+      "scenario_type": "update_existing_doc",
+      "input_shape": "existing_doc_update",
+      "ambiguity_level": "medium",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "update_regression",
+        "invented_certainty",
+        "weak_boundaries"
+      ],
+      "prompt": "We have an older Lightfast foundation draft that overstates a few conclusions. Update it in place: replace the `operating system for durable agent work` framing with narrower source-bound language about a durable artifact or constraint layer for agent work; replace the thesis line about `replacing ambiguous human direction with machine-executable constraints` so it instead frames Lightfast as structuring human judgment through stable constraints; remove settled claims that repo-native is the clear long-term center of gravity or that hosted control planes matter less, and replace them with an explicit open question about repo-native usage versus a hosted control plane, catalog, or distribution surface; rewrite the wedge language so coding workflows are the easiest first wedge because eval loops are tighter, without implying coding is the permanent center of gravity; and soften any remaining categorical `Strategic Bets` language into directional, source-bound signals. Keep the existing heading structure and preserve everything else unless one of these local rewrites requires adjacent wording changes.",
+      "expected_output": "The older Lightfast foundation document is updated in place: the overreaching `operating system` framing is narrowed, the primitive is reframed around structuring human judgment rather than replacing it, settled repo-native superiority claims are removed and restored as an open tension, the wedge language now says coding workflows are the easiest first wedge because eval loops are tighter without implying permanent scope, and any remaining categorical strategic-bet language is softened into directional evidence. Unchanged content stays in place and no new planning or strategy sections are added.",
+      "expected_file": "fixtures/lightfast_foundation_tighten/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "foundation-update-v1",
+        "template_file": "references/template.md",
+        "language_file": "references/language.md",
+        "existing_foundation_file": "evals/fixtures/existing_foundation_overconfident.md",
+        "allowed_removed_patterns": [
+          {
+            "pattern": "^Lightfast is an operating system for durable agent work\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- The core primitive is replacing ambiguous human direction with machine-executable constraints\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Repo-native workflows are the clear long-term center of gravity\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Coding is the product center of gravity, not just the initial wedge\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Skills are the wedge and will remain the product center of gravity\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Repo-native distribution matters more than any hosted control plane\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Formal constraints and reusable artifacts will outlast raw prompts and transcripts\\.$",
+            "flags": "i"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "narrower_artifact_layer_framing_present",
+            "pattern": "source-bound.*durable artifact and constraint layer|source-bound.*durable artifacts? and constraints?|durable artifact and constraint layer.*agent(?:-enabled)? work",
+            "flags": "i",
+            "details_pass": "Detected the narrower durable-artifact/constraint-layer framing in `What This Is`.",
+            "details_fail": "Did not detect the requested narrower durable-artifact/constraint-layer framing."
+          },
+          {
+            "id": "human_judgment_thesis_present",
+            "pattern": "structur(?:e|ing) human judgment.*stable(?:,? [a-z-]+)? constraints?|stable(?:,? [a-z-]+)? constraints?.*structur(?:e|ing) human judgment",
+            "flags": "i",
+            "details_pass": "Detected the requested thesis language about structuring human judgment through stable constraints.",
+            "details_fail": "Did not detect the requested thesis language about structuring human judgment through stable constraints."
+          },
+          {
+            "id": "coding_first_wedge_is_qualified",
+            "pattern": "coding workflows.*easiest (?:first|initial) wedge because eval(?:uation)? loops are tighter",
+            "flags": "i",
+            "details_pass": "Detected the requested qualified coding-first wedge language.",
+            "details_fail": "Did not detect the requested qualified coding-first wedge language."
+          },
+          {
+            "id": "repo_native_vs_hosted_tension_restored",
+            "pattern": "repo-native.*hosted (?:control plane|catalog|distribution surface)",
+            "flags": "i",
+            "details_pass": "Detected the requested repo-native versus hosted tension.",
+            "details_fail": "Did not detect the requested repo-native versus hosted tension."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "operating_system_overreach_removed",
+            "pattern": "operating system for durable agent work",
+            "flags": "i",
+            "details_pass": "Did not detect the overreaching `operating system` framing.",
+            "details_fail": "Still detected the overreaching `operating system` framing."
+          },
+          {
+            "id": "machine_executable_constraint_line_removed",
+            "pattern": "replacing ambiguous human direction with machine-executable constraints",
+            "flags": "i",
+            "details_pass": "Did not detect the old thesis language about replacing ambiguous human direction.",
+            "details_fail": "Still detected the old thesis language about replacing ambiguous human direction."
+          },
+          {
+            "id": "repo_native_winner_claim_removed",
+            "pattern": "repo-native workflows are the clear long-term center of gravity|repo-native distribution matters more than any hosted control plane",
+            "flags": "i",
+            "details_pass": "Did not detect the old settled repo-native winner claims.",
+            "details_fail": "Still detected a settled repo-native winner claim that should have been removed."
+          },
+          {
+            "id": "permanent_wedge_claim_removed",
+            "pattern": "coding is the product center of gravity, not just the initial wedge|skills are the wedge and will remain the product center of gravity",
+            "flags": "i",
+            "details_pass": "Did not detect the old permanent-center-of-gravity wedge claims.",
+            "details_fail": "Still detected a permanent-center-of-gravity wedge claim that should have been removed."
+          }
+        ]
+      },
+      "packet_files": {
+        "expected_criteria": "fixtures/lightfast_foundation_tighten/expected_criteria.md",
+        "existing_foundation": "fixtures/existing_foundation_overconfident.md"
+      },
+      "files": [
+        "fixtures/existing_foundation_overconfident.md"
+      ]
     }
   ]
 }

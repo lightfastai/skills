@@ -30,6 +30,7 @@ bun install
 bun run eval:foundation -- create-foundation-from-vercel-source-packet
 bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
 bun run eval:foundation -- update-lightfast-foundation-boundary-surface-question
+bun run eval:foundation -- update-lightfast-foundation-tighten-overreach
 bun run eval:spec -- create-from-vercel-mcp-source-packet
 bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --trials 3
 ```
@@ -44,6 +45,7 @@ Current `foundation-creator` corpus includes:
 - `create-foundation-from-lightfast-founder-notes`
 - `create-foundation-from-harbor-care-source-packet`
 - `update-lightfast-foundation-boundary-surface-question`
+- `update-lightfast-foundation-tighten-overreach`
 
 The runner now also writes:
 

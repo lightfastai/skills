@@ -23,9 +23,10 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
     - Avoid implementation detail.
     - If `existing_foundation` is present, treat this as update mode:
       - preserve the existing section structure
-      - carry forward unchanged framing and language where possible
+      - carry forward unchanged framing and language verbatim whenever possible
       - extract a narrow `update_request` rather than rewriting the entire document
       - do not resolve existing ambiguity unless the task prompt explicitly asks for it
+      - if a boundary, actor, surface, strategic bet, or open question is not explicitly targeted by the task prompt, keep its wording unchanged in the brief
     - Do not infer monetization, metrics, org structure, GTM strategy, or operating plans unless the packet explicitly supports them.
     - If `strategic_bets` are included, phrase them as observed directional signals or evidence.
     - Each `strategic_bets` item should start with explicit hedge language such as `The notes suggest a bet on...`, `There are visible signals that...`, or `The company appears to be betting on...`.
@@ -72,6 +73,7 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
     - If `existing_foundation` is present, treat this as update mode:
       - start from `existing_foundation`
       - preserve all unchanged lines verbatim
+      - preserve unchanged bullet wording and unchanged open questions exactly as written
       - apply only the edits implied by `update_request`
       - do not rewrite existing paragraphs or bullets unless the request requires it
       - do not add new sections or broad new framing unless `update_request` explicitly asks for them
