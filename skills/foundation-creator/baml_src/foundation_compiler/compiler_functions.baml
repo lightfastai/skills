@@ -83,7 +83,13 @@ function CompileFoundationBrief(
     - Remove unsupported inferences rather than softening them.
     - Prefer omission over consultant-style expansion.
     - Do not add business-model, KPI, org, roadmap, or operating-plan language unless source-backed.
-    - Treat `strategic_bets` as observed directional bets, not recommendations or settled future state.
+    - Treat `strategic_bets` as source-visible directional signals, not recommendations or settled future state.
+    - Each `strategic_bets` item must begin with an evidence-matched source-centered opening.
+    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
+    - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
+    - Avoid wording that attributes settled intent directly to the company, such as `The company appears to be betting on...`.
+    - Forbid prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
+    - If a possible bet cannot be phrased as a source-visible signal without overclaiming, move it to `open_questions` or omit it.
     - If a surface is visible but still in transition, preserve that qualification in the surrounding summary or questions.
     - Avoid market-leadership or competitive-superiority language unless directly supported by source material.
 
@@ -111,6 +117,9 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - State that the writer is a source-bound synthesizer, not a strategy consultant.
     - If the brief includes `existing_foundation`, treat the task as update mode and preserve the existing document verbatim except for the requested edits.
     - In update mode, tell the writer to copy every unchanged bullet and question verbatim instead of paraphrasing it.
+    - In update mode, do not normalize nouns or labels inside unchanged lines; if an unchanged question says `company`, keep `company` rather than rewriting it as `project`, `product`, or `primitive`.
+    - In update mode, when the edit request supplies target phrasing for a local rewrite, preserve those anchor words rather than substituting looser synonyms.
+    - For example, if the request says `easiest first wedge because eval loops are tighter`, keep both `easiest first wedge` and `eval loops are tighter` explicit in the revised line.
     - Require markdown output with exactly this heading structure unless the user asks otherwise:
       - `# <Primitive Name> Foundation`
       - `## What This Is`
@@ -120,15 +129,22 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
       - `## Durable Surfaces`
       - `## Strategic Bets`
       - `## Open Questions`
+    - Require `Core Thesis`, `Boundaries`, `Actor Model`, `Durable Surfaces`, `Strategic Bets`, and `Open Questions` to use markdown bullets with `- ` for each item rather than paragraph-only prose.
     - Forbid extra sections like `Success Signals`, `Metrics`, `Decision Agenda`, `Next Steps`, `Operating Guidance`, or `Roadmap`.
-    - Require `Strategic Bets` to be phrased as observed directional bets or public signals rather than prescriptions.
-    - Require each `Strategic Bets` bullet to start with explicit hedge language such as `The notes suggest a bet on...`, `There are visible signals that...`, or `The company appears to be betting on...`.
-    - Forbid bare `Bet:` labels and categorical claims like `X is the wedge` or `Y is a defensible primitive`.
+    - Require `Strategic Bets` to be phrased as source-visible directional signals rather than prescriptions or settled company posture.
+    - Require each `Strategic Bets` bullet to begin with an evidence-matched source-centered opening.
+    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
+    - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
+    - Forbid wording like `The company appears to be betting on...`, bare `Bet:` labels, or categorical claims like `X is the wedge`, `Y is a defensible primitive`, `X will remain the center of gravity`, or `Y matters more than Z`.
+    - Forbid prescriptive verbs in `Strategic Bets`, including `prioritize`, `invest in`, `ship`, or `treat as first-class`.
+    - If a would-be strategic bet cannot be phrased as a source-visible signal, convert it into an `Open Questions` bullet or omit it.
     - Require recently emerging or transitional surfaces to be qualified explicitly rather than flattened as fully settled.
     - Require `Open Questions` bullets to remain actual unresolved questions rather than disguised conclusions.
     - Forbid market-leadership or superiority claims unless they are explicit in the brief.
     - In update mode, do not add new sections or broad new framing unless the request explicitly asks for them.
     - In update mode, if a boundary, actor, surface, strategic bet, or open question is not part of the requested edit, preserve its wording exactly.
+    - In update mode, preserve unchanged nouns and subject labels inside copied lines exactly as written.
+    - In update mode, if the request gives a specific comparative or causal formulation, keep that formulation explicit instead of paraphrasing it away.
     - Make the prompt directly usable by an agent.
 
     Brief:

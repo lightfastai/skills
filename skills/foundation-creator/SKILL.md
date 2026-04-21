@@ -97,7 +97,10 @@ Typical update shapes:
 - Durable thesis-level framing.
 - Actor model and durable surfaces.
 - Strategic bets only when they are clearly supported by the source material.
-  Frame them as observed directional bets, not recommendations.
+  Frame them as source-visible directional signals, not recommendations or
+  direct claims about company intent. Match the lead-in to the evidence:
+  note-style packets should use note-style attribution, and `Public materials
+  suggest...` should appear only when the packet actually cites public sources.
 - Open questions and unresolved tensions.
 
 ## Forbidden drift

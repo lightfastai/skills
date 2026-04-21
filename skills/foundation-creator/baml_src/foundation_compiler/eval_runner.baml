@@ -27,9 +27,18 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
       - extract a narrow `update_request` rather than rewriting the entire document
       - do not resolve existing ambiguity unless the task prompt explicitly asks for it
       - if a boundary, actor, surface, strategic bet, or open question is not explicitly targeted by the task prompt, keep its wording unchanged in the brief
+      - when a line is unchanged, copy its text verbatim from `existing_foundation` instead of normalizing nouns or labels
+      - do not rewrite unchanged `company`, `product`, `primitive`, or actor labels into nearby synonyms
+      - if the task prompt gives target phrasing for a local rewrite, preserve those anchor words in the rewritten field instead of loosening them into synonyms
+      - if the task prompt specifies a comparative or causal clause such as `easiest first wedge because eval loops are tighter`, keep that clause explicit
     - Do not infer monetization, metrics, org structure, GTM strategy, or operating plans unless the packet explicitly supports them.
-    - If `strategic_bets` are included, phrase them as observed directional signals or evidence.
-    - Each `strategic_bets` item should start with explicit hedge language such as `The notes suggest a bet on...`, `There are visible signals that...`, or `The company appears to be betting on...`.
+    - If `strategic_bets` are included, phrase them as source-visible directional signals or evidence.
+    - Each `strategic_bets` item must begin with an evidence-matched source-centered opening.
+    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
+    - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
+    - Do not phrase `strategic_bets` as direct statements of company intent such as `The company appears to be betting on...`.
+    - Do not use prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
+    - If a possible bet cannot be stated as a source-visible signal without overclaiming, move it to `open_questions` or omit it.
     - Do not use bare `Bet:` labels or categorical claims like `X is the wedge` or `Y is a defensible primitive`.
     - Keep `strategic_bets` short when evidence is weak.
     - Keep unresolved questions as actual unresolved questions rather than quietly resolving them in the summary.
@@ -63,10 +72,17 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
       - `## Durable Surfaces`
       - `## Strategic Bets`
       - `## Open Questions`
+    - Render `Core Thesis`, `Boundaries`, `Actor Model`, `Durable Surfaces`, `Strategic Bets`, and `Open Questions` as markdown bullet lists using `- ` for every item.
+    - Do not render `Strategic Bets` or `Open Questions` as paragraph-only prose.
     - If `Strategic Bets` is weakly supported, keep it short rather than expanding it.
-    - Phrase `Strategic Bets` as observed directional bets or public signals, not recommendations or settled future state.
-    - Each `Strategic Bets` bullet must start with explicit hedge language such as `The notes suggest a bet on...`, `There are visible signals that...`, or `The company appears to be betting on...`.
-    - Do not use bare `Bet:` labels or categorical statements like `X is the wedge` or `Y is a defensible primitive`.
+    - Phrase `Strategic Bets` as source-visible directional signals, not recommendations or settled future state.
+    - Each `Strategic Bets` bullet must begin with an evidence-matched source-centered opening.
+    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
+    - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
+    - Do not use direct company-intent phrasing such as `The company appears to be betting on...`.
+    - Do not use bare `Bet:` labels or categorical statements like `X is the wedge`, `Y is a defensible primitive`, `X will remain the center of gravity`, or `Y matters more than Z`.
+    - Do not use prescriptive verbs like `prioritize`, `invest in`, `ship`, or `treat as first-class` in `Strategic Bets`.
+    - If a would-be strategic bet cannot be phrased as a source-visible signal, convert it into an `Open Questions` bullet or omit it.
     - When a surface is visible but still evolving in the packet, qualify it explicitly as emerging, evolving, or unsettled.
     - Write `Open Questions` as actual unresolved questions, typically ending with `?`.
     - Do not use market-leadership or competitive-superiority language unless the packet explicitly supports it.
@@ -77,6 +93,9 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
       - apply only the edits implied by `update_request`
       - do not rewrite existing paragraphs or bullets unless the request requires it
       - do not add new sections or broad new framing unless `update_request` explicitly asks for them
+      - copy unchanged lines literally, including nouns and subject labels such as `company`, rather than normalizing them into synonyms
+      - if `update_request` supplies target phrasing for a local rewrite, preserve those anchor words rather than replacing them with looser synonyms
+      - if `update_request` includes a comparative or causal clause such as `easiest first wedge because eval loops are tighter`, keep that clause explicit in the revised line
 
     Brief:
     {{ brief|format(type="yaml") }}
@@ -106,7 +125,11 @@ function EvaluateFoundationDocument(
     - Penalize unsupported business-model, monetization, KPI, org, partnership, or operating-plan language.
     - Penalize consulting-style sections such as `Success Signals`, `Metrics`, `Decision Agenda`, `Next Steps`, `Operating Guidance`, or similar drift.
     - Penalize missing markdown heading structure if the document drifts from the required template shape.
-    - Penalize `Strategic Bets` phrased as recommendations or settled conclusions when the packet only supports directional evidence.
+    - Penalize paragraph-only rendering of list sections that the template expects as markdown bullets, especially `Strategic Bets` and `Open Questions`.
+    - `## Strategic Bets` is a required template section. Do not penalize its presence by itself when the bullets remain source-bound and restrained.
+    - Penalize `Strategic Bets` phrased as recommendations, direct company-intent claims, or settled conclusions when the packet only supports directional evidence.
+    - Penalize `Strategic Bets` that use verbs like `prioritize`, `invest in`, `ship`, `treat as first-class`, `will remain`, or `matters more than`, or phrases like `The company appears to be betting on...`.
+    - Penalize evidence-source mismatch inside `Strategic Bets`, such as `Public materials suggest...` when the packet only contains founder notes or internal notes.
     - Penalize flattening transitional surfaces as fully settled if the packet presents them as evolving.
     - Penalize `Open Questions` that silently resolve ambiguity instead of keeping it open.
     - Penalize market-leadership or competitive-superiority claims not explicitly supported by the packet.

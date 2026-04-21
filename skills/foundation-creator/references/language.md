@@ -23,14 +23,17 @@ How the foundation document should be worded.
 - Keep the section order exactly as the template defines it.
 - In update mode, preserve the existing section order and keep unchanged wording
   intact unless the requested edit requires a local rewrite.
-- Use bullets for `Core Thesis`, `Boundaries`, `Actor Model`, `Durable Surfaces`,
-  `Strategic Bets`, and `Open Questions`.
+- Use markdown bullets with `- ` for every item in `Core Thesis`, `Boundaries`,
+  `Actor Model`, `Durable Surfaces`, `Strategic Bets`, and `Open Questions`.
+- Do not render `Strategic Bets` or `Open Questions` as paragraph-only prose.
 - `Open Questions` bullets should be written as actual open questions and usually
   end with `?`.
 - `Strategic Bets` should be framed as observed directional signals or bets
-  rather than recommendations. Wording like `materials suggest a bet on...`,
-  `the company appears to be betting on...`, or `public signals indicate...`
-  is preferred.
+  rather than recommendations. Match the lead phrase to the evidence:
+  for note-only packets, prefer `the notes suggest...`,
+  `there are visible signals that...`, or `the source material indicates...`.
+  Use `public materials suggest...` only when the packet explicitly cites
+  public docs, press releases, or other external sources.
 
 ## 4. Restraint Rules
 
@@ -55,12 +58,17 @@ How the foundation document should be worded.
   implementation components. If a surface is source-visible but still in
   transition, qualify it explicitly as emerging or evolving.
 - `Strategic Bets` should be minimal and clearly grounded in repeated signals.
-  Each bullet should start with visible-evidence language such as `the notes
-  suggest a bet on...`, `public materials suggest...`, `there are visible
-  signals that...`, or `the company appears to be betting on...` rather than
-  settled declarations or recommendations.
-  Avoid naked labels like `Bet:` and avoid categorical claims like `X is the
-  wedge` or `Y is a defensible primitive`.
+  Each bullet should start with visible-evidence language that matches the
+  packet. For note-only packets, use `the notes suggest...`,
+  `there are visible signals that...`, or `the source material indicates...`.
+  Use `public materials suggest...` only when the packet explicitly cites
+  public docs, press releases, or other external sources, rather than settled
+  declarations or recommendations.
+  Avoid naked labels like `Bet:`. Avoid company-intent phrasing like
+  `the company appears to be betting on...`. Avoid categorical claims like
+  `X is the wedge`, `Y is a defensible primitive`, `X will remain the center
+  of gravity`, or `Y matters more than Z`. Avoid prescriptive verbs such as
+  `prioritize`, `invest in`, `ship`, or `treat as first-class`.
 - `Open Questions` should remain open rather than being quietly resolved in
   prose elsewhere.
 

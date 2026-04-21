@@ -1,4 +1,4 @@
-import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -17,6 +17,41 @@ const STATUS_RANK = {
   Pass: 0,
   Partial: 1,
   Fail: 2,
+};
+
+const EVAL_PROFILE_PRESETS = {
+  fast: {
+    name: "fast",
+    description: "Fast inner-loop runs with GPT-5.4 mini for candidate and judge.",
+    candidateModel: "openai/gpt-5.4-mini",
+    judgeModel: "openai/gpt-5.4-mini",
+    candidateOverlayProfiles: ["model-openai-gpt-5.4-mini"],
+    judgeOverlayProfiles: ["model-openai-gpt-5.4-mini"],
+  },
+  gate: {
+    name: "gate",
+    description: "Candidate on GPT-5.4 mini, judged by GPT-5.4.",
+    candidateModel: "openai/gpt-5.4-mini",
+    judgeModel: "openai/gpt-5.4",
+    candidateOverlayProfiles: ["model-openai-gpt-5.4-mini"],
+    judgeOverlayProfiles: ["model-openai-gpt-5.4"],
+  },
+  prod: {
+    name: "prod",
+    description: "Production authoring default as candidate, judged by GPT-5.4.",
+    candidateModel: "skill-default",
+    judgeModel: "openai/gpt-5.4",
+    candidateOverlayProfiles: [],
+    judgeOverlayProfiles: ["model-openai-gpt-5.4"],
+  },
+  cross: {
+    name: "cross",
+    description: "Candidate on GPT-5.4 mini, judged by Claude Opus 4.7 through AI Gateway.",
+    candidateModel: "openai/gpt-5.4-mini",
+    judgeModel: "anthropic/claude-opus-4-7",
+    candidateOverlayProfiles: ["model-openai-gpt-5.4-mini"],
+    judgeOverlayProfiles: ["model-anthropic-claude-opus-4-7"],
+  },
 };
 
 function normalizeLine(line) {
@@ -122,6 +157,7 @@ function parseArgs(argv) {
   const positionals = [];
   let trials = 1;
   let compare = [];
+  let evalProfile = "fast";
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -152,6 +188,19 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--eval-profile") {
+      const next = argv[index + 1];
+      if (!next) {
+        fail("Missing value after --eval-profile.");
+      }
+      evalProfile = next.trim();
+      if (evalProfile.length === 0) {
+        fail("--eval-profile must not be empty.");
+      }
+      index += 1;
+      continue;
+    }
+
     positionals.push(arg);
   }
 
@@ -160,7 +209,59 @@ function parseArgs(argv) {
     selector: positionals[1],
     trials,
     compare,
+    evalProfile,
   };
+}
+
+function dedupeStrings(values) {
+  const deduped = [];
+  const seen = new Set();
+
+  for (const value of values) {
+    if (seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    deduped.push(value);
+  }
+
+  return deduped;
+}
+
+function getEvalProfilePreset(rawValue) {
+  const value = rawValue?.trim() || "fast";
+  const preset = EVAL_PROFILE_PRESETS[value];
+
+  if (!preset) {
+    fail(
+      `Unknown eval profile '${rawValue}'. Use one of: ${Object.keys(EVAL_PROFILE_PRESETS).join(", ")}.`,
+    );
+  }
+
+  return {
+    ...preset,
+    candidateOverlayProfiles: dedupeStrings(preset.candidateOverlayProfiles ?? []),
+    judgeOverlayProfiles: dedupeStrings(preset.judgeOverlayProfiles ?? []),
+  };
+}
+
+function summarizeEvalProfile(evalProfile) {
+  return {
+    name: evalProfile.name,
+    description: evalProfile.description,
+    candidate_model: evalProfile.candidateModel,
+    judge_model: evalProfile.judgeModel,
+    candidate_overlay_profiles: evalProfile.candidateOverlayProfiles,
+    judge_overlay_profiles: evalProfile.judgeOverlayProfiles,
+  };
+}
+
+function sameStringArray(left, right) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
 }
 
 function shellEscape(value) {
@@ -303,7 +404,11 @@ function getEvalBySelector(evals, selector) {
 
 async function generateClient(skillRoot) {
   const bamlSrc = path.join(skillRoot, "baml_src");
-  await runCommand("bunx", ["baml-cli", "generate", "--from", bamlSrc], repoRoot);
+  await runCommand(
+    "node",
+    [path.join(repoRoot, "node_modules", "@boundaryml", "baml", "cli.js"), "generate", "--from", bamlSrc],
+    repoRoot,
+  );
 }
 
 async function importGeneratedClient(skillRoot) {
@@ -373,6 +478,18 @@ async function cloneSkillRoot(sourceSkillRoot, destinationSkillRoot) {
   });
 }
 
+async function linkWorkspaceNodeModules(workspaceRoot) {
+  const workspaceNodeModulesPath = path.join(workspaceRoot, "node_modules");
+
+  try {
+    await symlink(path.join(repoRoot, "node_modules"), workspaceNodeModulesPath, "dir");
+  } catch (error) {
+    if (error?.code !== "EEXIST") {
+      throw error;
+    }
+  }
+}
+
 async function materializeGitSkillRoot(skillName, ref, workspaceRoot) {
   const repoRelativeSkillPath = path.posix.join("skills", skillName);
   const archiveCommand = [
@@ -387,8 +504,33 @@ async function materializeGitSkillRoot(skillName, ref, workspaceRoot) {
   return path.join(workspaceRoot, "skills", skillName);
 }
 
-async function materializeVariantSkillRoot(skillName, baseSkillRoot, variant) {
-  if (variant.kind === "current") {
+async function resolveProfileRoot(baseSkillRoot, profileName) {
+  const profileRoot = path.join(baseSkillRoot, "eval_profiles", profileName);
+
+  try {
+    await access(profileRoot);
+  } catch {
+    fail(`Skill profile '${profileName}' not found at ${profileRoot}.`);
+  }
+
+  return profileRoot;
+}
+
+async function applyOverlayProfiles(skillRoot, baseSkillRoot, overlayProfileNames) {
+  for (const profileName of overlayProfileNames) {
+    const profileRoot = await resolveProfileRoot(baseSkillRoot, profileName);
+    await cp(profileRoot, skillRoot, {
+      recursive: true,
+      force: true,
+    });
+  }
+}
+
+async function materializeVariantSkillRoot(skillName, baseSkillRoot, variant, overlayProfileNames = []) {
+  const dedupedOverlayProfiles = dedupeStrings(overlayProfileNames);
+  const needsWorkspace = variant.kind !== "current" || dedupedOverlayProfiles.length > 0;
+
+  if (!needsWorkspace) {
     return {
       skillRoot: baseSkillRoot,
       cleanupRoot: null,
@@ -398,9 +540,21 @@ async function materializeVariantSkillRoot(skillName, baseSkillRoot, variant) {
   const workspaceRoot = await mkdtemp(
     path.join(os.tmpdir(), `lightfast-skill-eval-${slugifyVariantLabel(variant.label)}-`),
   );
+  await linkWorkspaceNodeModules(workspaceRoot);
+  let skillRoot = path.join(workspaceRoot, "skills", skillName);
+
+  if (variant.kind === "current") {
+    await cloneSkillRoot(baseSkillRoot, skillRoot);
+    await applyOverlayProfiles(skillRoot, baseSkillRoot, dedupedOverlayProfiles);
+    return {
+      skillRoot,
+      cleanupRoot: workspaceRoot,
+    };
+  }
 
   if (variant.kind === "git") {
-    const skillRoot = await materializeGitSkillRoot(skillName, variant.ref, workspaceRoot);
+    skillRoot = await materializeGitSkillRoot(skillName, variant.ref, workspaceRoot);
+    await applyOverlayProfiles(skillRoot, baseSkillRoot, dedupedOverlayProfiles);
     return {
       skillRoot,
       cleanupRoot: workspaceRoot,
@@ -408,20 +562,13 @@ async function materializeVariantSkillRoot(skillName, baseSkillRoot, variant) {
   }
 
   if (variant.kind === "profile") {
-    const skillRoot = path.join(workspaceRoot, "skills", skillName);
-    const profileRoot = path.join(baseSkillRoot, "eval_profiles", variant.profileName);
-
-    try {
-      await access(profileRoot);
-    } catch {
-      fail(`Comparison profile '${variant.profileName}' not found at ${profileRoot}.`);
-    }
-
+    const profileRoot = await resolveProfileRoot(baseSkillRoot, variant.profileName);
     await cloneSkillRoot(baseSkillRoot, skillRoot);
     await cp(profileRoot, skillRoot, {
       recursive: true,
       force: true,
     });
+    await applyOverlayProfiles(skillRoot, baseSkillRoot, dedupedOverlayProfiles);
 
     return {
       skillRoot,
@@ -461,7 +608,11 @@ async function ensureFreshClient(skillRoot) {
     "utf8",
   );
   try {
-    await runCommand("bunx", ["tsc", "--project", tsconfigPath], repoRoot);
+    await runCommand(
+      "node",
+      [path.join(repoRoot, "node_modules", "typescript", "bin", "tsc"), "--project", tsconfigPath],
+      repoRoot,
+    );
   } finally {
     await rm(tsconfigPath, { force: true });
   }
@@ -610,6 +761,50 @@ function extractMarkdownBullets(sectionBody) {
   return bullets;
 }
 
+function packetAllowsPublicMaterialsLead(packet) {
+  if (!packet || typeof packet.raw_notes !== "string") {
+    return true;
+  }
+
+  return (
+    /\bURL:\b/i.test(packet.raw_notes) ||
+    /\b##\s+Source\s+\d+/i.test(packet.raw_notes) ||
+    /\bofficial\b.*\bsources?\b/i.test(packet.raw_notes) ||
+    /\bpress release\b/i.test(packet.raw_notes) ||
+    /\bdocs homepage\b/i.test(packet.raw_notes) ||
+    /\bLast updated:\b/i.test(packet.raw_notes) ||
+    /\bPublished:\b/i.test(packet.raw_notes)
+  );
+}
+
+function strategicBetUsesApprovedLead(line, { allowPublicMaterialsLead = true } = {}) {
+  const publicLeadPattern = allowPublicMaterialsLead
+    ? "|Public materials suggest(?:\\s+a bet on|\\s+that)?"
+    : "";
+
+  return new RegExp(
+    `^(The notes suggest(?:\\s+a bet on|\\s+that)?|There are visible signals that${publicLeadPattern}|The source material indicates(?:\\s+a bet on|\\s+that)?)`,
+    "i",
+  ).test(line);
+}
+
+function strategicBetUsesDisallowedLanguage(line) {
+  const normalized = normalizeLine(line).toLowerCase();
+
+  return (
+    normalized.includes("the company appears to be betting on") ||
+    /\bprioriti(?:ze|zes|zed|zing)\b/.test(normalized) ||
+    /\binvest(?:s|ed|ing)? in\b/.test(normalized) ||
+    /\bship(?:s|ped|ping)?\b/.test(normalized) ||
+    /\btreat(?:s|ed|ing)?\b.*\bfirst-class\b/.test(normalized) ||
+    normalized.includes("first-class") ||
+    normalized.includes("is the wedge") ||
+    normalized.includes("is a defensible primitive") ||
+    normalized.includes("will remain") ||
+    normalized.includes("matters more than")
+  );
+}
+
 function extractNormalizedMarkdownBlocks(text) {
   const blocks = [];
   let current = null;
@@ -653,7 +848,7 @@ function extractNormalizedMarkdownBlocks(text) {
   return blocks;
 }
 
-function validateFoundationDocument(candidateDocument, templateText) {
+function validateFoundationDocument(candidateDocument, templateText, languageText, packet) {
   const requiredSections = extractFoundationTemplateSections(templateText);
   const disallowedHeadings = extractFoundationDisallowedHeadings(templateText);
   const { lines, sections, bodies } = extractFoundationSectionBodies(candidateDocument);
@@ -710,22 +905,21 @@ function validateFoundationDocument(candidateDocument, templateText) {
   const strategicBetsBody = bodies.get("Strategic Bets") ?? "";
   const openQuestionsBody = bodies.get("Open Questions") ?? "";
   const openQuestionBullets = extractMarkdownBullets(openQuestionsBody);
+  const allowPublicMaterialsLead = packetAllowsPublicMaterialsLead(packet);
   const openQuestionsLookOpen =
     openQuestionBullets.length > 0 &&
     openQuestionBullets.every((line) => line.endsWith("?"));
   const strategicBetLines = extractMarkdownBullets(strategicBetsBody);
-  const strategicBetsBodyHasDirectionalPreamble = /\b(observed directional bets|public signals)\b/i.test(
-    strategicBetsBody,
-  );
+  const strategicBetsUseBullets =
+    strategicBetsBody.trim().length === 0 || strategicBetLines.length > 0;
   const hedgedStrategicBets =
-    strategicBetLines.length === 0 ||
+    strategicBetLines.length > 0 &&
     strategicBetLines.every((line) =>
-      /^Bet:/i.test(line)
-        ? strategicBetsBodyHasDirectionalPreamble
-        : /\b(appears?|suggests?|signals?|signaling|indicates?|indicating|indications?|directional bet|directional bets|observed bet|observed bets|a bet that|bet that|bet on)\b/i.test(
-            line,
-          ),
+      strategicBetUsesApprovedLead(line, { allowPublicMaterialsLead }),
     );
+  const strategicBetsAvoidPrescriptiveOrCompanyPosture =
+    strategicBetLines.length === 0 ||
+    strategicBetLines.every((line) => !strategicBetUsesDisallowedLanguage(line));
 
   return [
     createCheck(
@@ -766,11 +960,27 @@ function validateFoundationDocument(candidateDocument, templateText) {
         : `Disallowed sections present: ${presentDisallowedSections.join(", ")}.`,
     ),
     createCheck(
+      "strategic_bets_use_markdown_bullets",
+      strategicBetsUseBullets,
+      strategicBetsUseBullets
+        ? "Strategic Bets use markdown bullets."
+        : "Strategic Bets should be rendered as markdown bullets using `- `, not as paragraph-only prose.",
+    ),
+    createCheck(
       "strategic_bets_use_directional_language",
       hedgedStrategicBets,
       hedgedStrategicBets
-        ? "Strategic Bets are framed as directional bets or observed signals."
-        : "One or more Strategic Bets bullets read as settled conclusions instead of directional bets or observed signals.",
+        ? "Strategic Bets use approved source-centered lead phrasing."
+        : allowPublicMaterialsLead
+          ? "One or more Strategic Bets bullets do not begin with approved source-centered phrasing such as `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`."
+          : "One or more Strategic Bets bullets use evidence-source phrasing that does not match a notes-only packet. In note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.",
+    ),
+    createCheck(
+      "strategic_bets_avoid_prescriptive_or_company_intent_language",
+      strategicBetsAvoidPrescriptiveOrCompanyPosture,
+      strategicBetsAvoidPrescriptiveOrCompanyPosture
+        ? "Strategic Bets avoid prescriptive verbs and direct company-intent phrasing."
+        : "One or more Strategic Bets bullets use prescriptive verbs, categorical phrasing, or direct company-intent language.",
     ),
     createCheck(
       "open_questions_remain_questions",
@@ -794,8 +1004,9 @@ function validateFoundationUpdateDocument(
   existingFoundationText,
   templateText,
   validationContract,
+  packet,
 ) {
-  const baseChecks = validateFoundationDocument(candidateDocument, templateText);
+  const baseChecks = validateFoundationDocument(candidateDocument, templateText, "", packet);
   const existingBlocks = extractNormalizedMarkdownBlocks(existingFoundationText);
   const candidateBlocks = extractNormalizedMarkdownBlocks(candidateDocument);
   const normalizedCandidate = normalizeLine(candidateDocument);
@@ -844,14 +1055,37 @@ function extractSpecMajorSections(templateText) {
   return sections;
 }
 
+function extractSpecSubsections(templateText) {
+  const sections = [];
+  const lines = templateText.split(/\r?\n/);
+
+  for (const rawLine of lines) {
+    const line = normalizeLine(rawLine);
+    const match = line.match(/^### \d+\.\d+\s+(.+)$/);
+    if (match) {
+      sections.push(match[1]);
+    }
+  }
+
+  return sections;
+}
+
 function lineExists(lines, matcher) {
   return lines.some((line) => matcher(normalizeHeading(line)));
 }
 
 function validateSpecDocument(candidateDocument, templateText) {
   const requiredSections = extractSpecMajorSections(templateText);
+  const requiredSubsections = extractSpecSubsections(templateText);
   const lines = candidateDocument.split(/\r?\n/);
   const missingSections = requiredSections.filter(
+    (section) =>
+      !lineExists(
+        lines,
+        (line) => stripLeadingSectionNumber(line).toLowerCase() === section.toLowerCase(),
+      ),
+  );
+  const missingSubsections = requiredSubsections.filter(
     (section) =>
       !lineExists(
         lines,
@@ -865,9 +1099,12 @@ function validateSpecDocument(candidateDocument, templateText) {
   const hasGoalSubsections =
     lineExists(lines, (line) => line === "2.1 Goals") &&
     lineExists(lines, (line) => line === "2.2 Non-Goals");
-  const hasImportantBoundaryBlock = /(^|\n)Important boundary:\s*\n/m.test(candidateDocument);
+  const hasImportantBoundaryBlock =
+    /(^|\n)\s*(?:\*\*)?Important boundary:(?:\*\*)?\s*(?:\n|$)/m.test(candidateDocument);
   const hasNumberedComponents = /^\d+\.\s+`[^`]+`/m.test(candidateDocument);
   const hasFieldFormatting = /- `[^`]+` \([^)]+\)/.test(candidateDocument);
+  const fieldLinesAvoidRequirementKeywords =
+    !/- `[^`]+` \([^)]*\b(required|optional)\b[^)]*\)/i.test(candidateDocument);
 
   return [
     createCheck(
@@ -876,6 +1113,13 @@ function validateSpecDocument(candidateDocument, templateText) {
       missingSections.length === 0
         ? `All major template sections are present: ${requiredSections.join(", ")}.`
         : `Missing major sections: ${missingSections.join(", ")}.`,
+    ),
+    createCheck(
+      "required_subsections_present",
+      missingSubsections.length === 0,
+      missingSubsections.length === 0
+        ? `All template subsections are present: ${requiredSubsections.join(", ")}.`
+        : `Missing template subsections: ${missingSubsections.join(", ")}.`,
     ),
     createCheck(
       "status_line_present",
@@ -925,6 +1169,13 @@ function validateSpecDocument(candidateDocument, templateText) {
       hasFieldFormatting
         ? "Detected domain-field lines using the `` `field_name` (type) `` format."
         : "Did not detect any domain-field lines using the template field format.",
+    ),
+    createCheck(
+      "field_parens_avoid_requirement_keywords",
+      fieldLinesAvoidRequirementKeywords,
+      fieldLinesAvoidRequirementKeywords
+        ? "Field type parentheses avoid `required`/`optional` labels."
+        : "Detected `required` or `optional` inside field type parentheses; keep those details in the description bullets instead.",
     ),
     createCheck(
       "no_first_or_second_person",
@@ -992,7 +1243,7 @@ function validateSpecUpdateDocument(candidateDocument, existingSpecText) {
   ];
 }
 
-async function runDeterministicChecks(skillRoot, validationContract, candidateDocument) {
+async function runDeterministicChecks(skillRoot, validationContract, candidateDocument, packet = null) {
   if (!validationContract || validationContract.type !== "reference_document_checks") {
     return {
       enabled: false,
@@ -1023,7 +1274,7 @@ async function runDeterministicChecks(skillRoot, validationContract, candidateDo
   let checks;
   switch (validationContract.validator) {
     case "foundation-v1":
-      checks = validateFoundationDocument(candidateDocument, templateText, languageText);
+      checks = validateFoundationDocument(candidateDocument, templateText, languageText, packet);
       break;
     case "foundation-update-v1":
       checks = validateFoundationUpdateDocument(
@@ -1031,6 +1282,7 @@ async function runDeterministicChecks(skillRoot, validationContract, candidateDo
         existingFoundationText,
         templateText,
         validationContract,
+        packet,
       );
       break;
     case "spec-v1":
@@ -1112,6 +1364,7 @@ async function runSingleTrial({
     skillRoot,
     validationContract,
     candidateDocument,
+    packet,
   );
   timing.deterministic_ms = Date.now() - deterministicStartedAt;
 
@@ -1299,7 +1552,7 @@ function compareBenchmarks(left, right) {
   return rightSummary.deterministic_pass_rate - leftSummary.deterministic_pass_rate;
 }
 
-function buildComparisonReport(skillName, evalEntry, variantResults) {
+function buildComparisonReport(skillName, evalEntry, variantResults, evalProfile) {
   const currentVariant = variantResults.find((variantResult) => variantResult.variant.key === "current");
   const rankedVariants = [...variantResults]
     .sort((left, right) => compareBenchmarks(left.benchmark, right.benchmark))
@@ -1354,6 +1607,7 @@ function buildComparisonReport(skillName, evalEntry, variantResults) {
     eval_name: evalEntry.eval_name,
     trial_count: variantResults[0]?.benchmark.trial_count ?? 0,
     judge_variant: "current",
+    eval_profile: summarizeEvalProfile(evalProfile),
     eval_metadata: extractEvalMetadata(evalEntry),
     variants: variantResults.map((variantResult) => ({
       label: variantResult.variant.label,
@@ -1370,11 +1624,13 @@ function buildComparisonReport(skillName, evalEntry, variantResults) {
 }
 
 async function main() {
-  const { skillName, selector, trials, compare } = parseArgs(process.argv.slice(2));
+  const { skillName, selector, trials, compare, evalProfile: evalProfileName } = parseArgs(
+    process.argv.slice(2),
+  );
 
   if (!skillName) {
     fail(
-      "Usage: bun run ./scripts/run-baml-eval.mjs <foundation-creator|spec-creator> [eval-id-or-name] [--trials N] [--compare previous,profile:no-skill]",
+      "Usage: bun run ./scripts/run-baml-eval.mjs <foundation-creator|spec-creator> [eval-id-or-name] [--trials N] [--compare previous,profile:no-skill] [--eval-profile fast|gate|prod|cross]",
     );
   }
 
@@ -1385,6 +1641,7 @@ async function main() {
   const evalEntry = getEvalBySelector(manifest.evals, selector);
   const variants = buildVariantPlan(compare);
   const compareMode = compare.length > 0 || variants.length > 1;
+  const evalProfile = getEvalProfilePreset(evalProfileName);
   const runner = manifest.runner_contract;
   const validationContract = evalEntry.validation_contract ?? manifest.validation_contract ?? null;
 
@@ -1396,23 +1653,44 @@ async function main() {
     fail("AI_GATEWAY_API_KEY is required to execute BAML evals.");
   }
 
-  await ensureFreshClient(skillRoot);
-  const judgeGenerated = await importGeneratedClient(skillRoot);
+  const cleanupRoots = [];
+  const judgePrepared = await materializeVariantSkillRoot(
+    skillName,
+    skillRoot,
+    parseVariantSpec("current"),
+    evalProfile.judgeOverlayProfiles,
+  );
+  if (judgePrepared.cleanupRoot) {
+    cleanupRoots.push(judgePrepared.cleanupRoot);
+  }
+
+  await ensureFreshClient(judgePrepared.skillRoot);
+  const judgeGenerated = await importGeneratedClient(judgePrepared.skillRoot);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runDir = path.join(skillRoot, "evals", "runs", `${timestamp}-${evalEntry.eval_name}`);
-  const cleanupRoots = [];
 
   try {
     const variantResults = [];
 
     for (const variant of variants) {
-      const preparedVariant = await materializeVariantSkillRoot(skillName, skillRoot, variant);
-      if (preparedVariant.cleanupRoot) {
-        cleanupRoots.push(preparedVariant.cleanupRoot);
-      }
+      const currentVariantMatchesJudge =
+        variant.kind === "current" &&
+        sameStringArray(evalProfile.candidateOverlayProfiles, evalProfile.judgeOverlayProfiles);
 
+      let preparedVariant = judgePrepared;
       let candidateGenerated = judgeGenerated;
-      if (variant.kind !== "current") {
+
+      if (!currentVariantMatchesJudge) {
+        preparedVariant = await materializeVariantSkillRoot(
+          skillName,
+          skillRoot,
+          variant,
+          evalProfile.candidateOverlayProfiles,
+        );
+        if (preparedVariant.cleanupRoot) {
+          cleanupRoots.push(preparedVariant.cleanupRoot);
+        }
+
         await ensureFreshClient(preparedVariant.skillRoot);
         candidateGenerated = await importGeneratedClient(preparedVariant.skillRoot);
       }
@@ -1443,12 +1721,15 @@ async function main() {
     }
 
     if (compareMode) {
-      const comparison = buildComparisonReport(skillName, evalEntry, variantResults);
+      const comparison = buildComparisonReport(skillName, evalEntry, variantResults, evalProfile);
       await writeRunArtifacts(runDir, {
         "comparison.json": comparison,
       });
 
       console.log(`Run complete: ${runDir}`);
+      console.log(
+        `Eval profile: ${evalProfile.name} (candidate ${evalProfile.candidateModel}, judge ${evalProfile.judgeModel})`,
+      );
       console.log(`Trials per variant: ${trials}`);
       for (const variantResult of variantResults) {
         console.log(
@@ -1460,6 +1741,9 @@ async function main() {
 
     const benchmark = variantResults[0].benchmark;
     console.log(`Run complete: ${runDir}`);
+    console.log(
+      `Eval profile: ${evalProfile.name} (candidate ${evalProfile.candidateModel}, judge ${evalProfile.judgeModel})`,
+    );
     console.log(`Trials: ${trials}`);
     console.log(`LLM worst status: ${benchmark.benchmark_summary.llm_worst_status}`);
     console.log(`Combined worst status: ${benchmark.benchmark_summary.combined_worst_status}`);

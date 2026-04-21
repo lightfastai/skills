@@ -13,6 +13,9 @@ function ExtractClaims(raw_notes: string) -> Claim[] {
     - Use `Constraint` for hard operating requirements.
     - Use `OpenQuestion` when the note is unresolved.
     - Keep `sources` short and human-readable.
+    - Preserve packet-named capabilities separately when the notes distinguish them, such as docs, teams, projects, deployments, and logs.
+    - Do not infer internal implementation, storage, transport, token, registry, allowlist, or SDK detail unless the notes say it directly.
+    - Prefer omission over speculative completion.
 
     Raw notes:
     {{ raw_notes }}
@@ -29,10 +32,21 @@ function CompileSpecBrief(raw_notes: string, existing_spec: string?) -> SpecBrie
 
     Rules:
     - Produce a behavioral brief suitable for `spec-creator`.
+    - Follow the `spec-creator` contract rather than ad hoc document structure.
     - Prefer service-level behavior over product doctrine.
     - Preserve unresolved questions explicitly.
     - Do not invent implementation detail.
+    - Keep packet-named service surfaces distinct when they matter. For example, if the notes name teams separately from projects, do not silently collapse teams into projects.
+    - `components` should describe major service responsibilities or user-visible service surfaces, not low-level classes, methods, SDKs, or protocols.
+    - `abstraction_layers` should describe stable behavioral layers that make the service easier to reason about or port. Keep them service-level and conservative.
+    - `external_dependencies` must name external systems, resources, or authorities explicitly visible in the notes. Do not list inferred internals such as token issuance, allowlists, registries, classes, transport mechanics, or storage engines unless they are stated directly.
+    - `entities` should model only externally meaningful nouns the service manipulates or exposes. Do not create entities only to complete a plausible schema.
+    - Every entity field must be directly supported by the notes or be the minimal identity/status field required to keep the entity coherent. Prefer fewer fields over speculative completeness.
+    - Use only logical field types such as `string`, `integer`, `boolean`, `timestamp`, `list of strings`, `map`, or `string or null`. Do not invent custom type labels like `duration`.
+    - Do not embed `required`, `optional`, or invented constraints like `unique within service scope` into `type_expression`.
+    - If a concept is visible in the notes but does not support a stable entity schema, keep it in components, dependencies, or unresolved questions instead of forcing it into the domain model.
     - If `existing_spec` is present, preserve compatible intent and only sharpen gaps.
+    - Prefer omission over speculation.
 
     Raw notes:
     {{ raw_notes }}
@@ -55,6 +69,10 @@ function CritiqueSpecBrief(brief: SpecBrief) -> SpecCritique {
     - Flag implementation leakage.
     - Flag ambiguous terms that weaken a behavioral specification.
     - Flag missing sections implied by the current brief.
+    - Flag missing packet-named surfaces that were collapsed away, such as teams being buried inside projects.
+    - Flag abstraction layers that drift into low-level implementation or internal class design.
+    - Flag dependencies that name inferred internals rather than source-visible external systems.
+    - Flag entity/field modeling that looks like speculative schema completion rather than source-backed service behavior.
 
     Brief:
     {{ brief|format(type="yaml") }}
@@ -74,6 +92,7 @@ function RenderSpecCreatorPrompt(brief: SpecBrief) -> string {
     - Keep the output language-agnostic and behavioral.
     - Preserve unresolved questions instead of inventing decisions.
     - If the brief includes `existing_spec`, treat the task as update mode and preserve the existing document verbatim except for the requested edits.
+    - Treat `references/template.md` and `references/language.md` as the contract.
     - Require the canonical `spec-creator` section shape:
       - `# <Service Name> Specification`
       - `Status: Draft v1 (language-agnostic)`
@@ -84,16 +103,31 @@ function RenderSpecCreatorPrompt(brief: SpecBrief) -> string {
       - `### 2.2 Non-Goals`
       - `## 3. System Overview`
       - `### 3.1 Main Components`
-      - `### 3.2 External Dependencies`
+      - `### 3.2 Abstraction Levels`
+      - `### 3.3 External Dependencies`
       - `## 4. Core Domain Model`
       - `### 4.1 Entities`
     - Require `## 1. Problem Statement` to contain:
       - one opening paragraph
       - a line like `The service solves <N> operational problems:`
       - a bullet list of explicit operational problems
-    - Require `Important boundary:` as a labeled block inside the Problem Statement.
+    - Require the `Purpose:` line to name the service kind, the protected endpoint or access boundary, and the main resource surfaces at the highest stable granularity the brief supports.
+    - If the brief names surfaces like docs, teams, projects, deployments, or logs, mention them explicitly in the `Purpose:` line rather than replacing them with vague phrases like `operational context`.
+    - Keep the `Purpose:` line concrete and source-bound. Avoid metaphorical or unsourced framing verbs like `protects`, `defends`, `guards`, or similar language unless the brief explicitly uses them.
+    - Require `Important boundary:` as a standalone labeled block inside the Problem Statement, followed by boundary bullets.
     - Require numbered components and template-shaped field lines: `- `field_name` (type, constraints)`.
-    - Require external dependencies to stay at the system/service level rather than naming low-level API methods or SDK calls.
+    - Require `### 3.2 Abstraction Levels` to explain stable behavioral layers rather than runtime call order or internal code structure.
+    - Require external dependencies to stay at the system/service level rather than naming low-level API methods, SDK calls, token mechanics, registry internals, classes, or storage implementation.
+    - Require packet-named surfaces to remain visible when they materially matter. For example, if the brief distinguishes teams from projects, keep that distinction somewhere in the spec instead of collapsing it away.
+    - Require the domain model to stay conservative:
+      - include only entities materially supported by the brief
+      - prefer fewer entities over speculative completeness
+      - use minimal source-backed fields
+      - if a concept lacks enough support for a stable entity schema, keep it out of `## 4. Core Domain Model`
+    - In field lines, use only logical types and source-backed constraints.
+    - Do not put `required`, `optional`, `non-empty`, `unique`, or invented service-scope constraints inside the field parentheses.
+    - If requirement state matters, express it in the indented semantic bullet rather than inside the type parentheses.
+    - If `unresolved_questions` are materially important, add `## 5. Open Questions` after the domain model and render them as bullets.
     - In update mode, do not add new top-level sections or template-completion material unless the request explicitly asks for them.
     - Emphasize problem statement, goals, non-goals, components, dependencies, and entities.
     - Make the prompt directly usable by an agent.

@@ -18,9 +18,20 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
 
     Rules:
     - Produce a behavioral service brief suitable for `spec-creator`.
+    - Follow the `spec-creator` template and language guide rather than an ad hoc service summary.
     - Treat expected criteria as evaluation guidance, not as license to invent.
     - Preserve unresolved questions explicitly.
     - Avoid implementation detail.
+    - Keep packet-named service surfaces distinct when they matter. For example, if the packet names teams separately from projects, do not silently collapse teams into projects.
+    - `components` should describe major service responsibilities or user-visible service surfaces, not low-level classes, methods, SDKs, or protocols.
+    - `abstraction_layers` should describe stable behavioral layers that make the service easier to reason about or port. Keep them service-level and conservative.
+    - `external_dependencies` must name external systems, resources, or authorities explicitly visible in the packet. Do not list inferred internals such as token issuance, allowlists, registries, classes, transport mechanics, or storage engines unless they are stated directly.
+    - `entities` should model only externally meaningful nouns the service manipulates or exposes. Do not create entities only to complete a plausible schema.
+    - Every entity field must be directly supported by the packet or be the minimal identity/status field required to keep the entity coherent. Prefer fewer fields over speculative completeness.
+    - Use only logical field types such as `string`, `integer`, `boolean`, `timestamp`, `list of strings`, `map`, or `string or null`. Do not invent custom type labels like `duration`.
+    - Do not embed `required`, `optional`, or invented constraints like `unique within service scope` into `type_expression`.
+    - If a concept is visible in the packet but does not support a stable entity schema, keep it in components, dependencies, or unresolved questions instead of forcing it into the domain model.
+    - Prefer omission over speculation.
 
     {{ ctx.output_format }}
   "#
@@ -41,6 +52,9 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
       - `# <Service Name> Specification`
       - `Status: Draft v1 (language-agnostic)`
       - `Purpose: <one sentence>`
+    - Require the `Purpose:` line to name the service kind, the protected endpoint or access boundary, and the main resource surfaces at the highest stable granularity the brief supports.
+    - If the brief names surfaces like docs, teams, projects, deployments, or logs, mention them explicitly in the `Purpose:` line rather than replacing them with vague phrases like `operational context`.
+    - Keep the `Purpose:` line concrete and source-bound. Avoid metaphorical or unsourced framing verbs like `protects`, `defends`, `guards`, or similar language unless the brief explicitly uses them.
     - Include these sections in order:
       - `## 1. Problem Statement`
       - `## 2. Goals and Non-Goals`
@@ -48,20 +62,32 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
       - `### 2.2 Non-Goals`
       - `## 3. System Overview`
       - `### 3.1 Main Components`
-      - `### 3.2 External Dependencies`
+      - `### 3.2 Abstraction Levels`
+      - `### 3.3 External Dependencies`
       - `## 4. Core Domain Model`
       - `### 4.1 Entities`
     - In `## 1. Problem Statement`, write:
       - one opening paragraph describing the service at a high level
       - a line like `The service solves <N> operational problems:`
       - a bullet list of concrete operational problems
-    - Keep `Important boundary:` as a labeled block inside `## 1. Problem Statement`. Do not turn it into a standalone section.
+    - Keep `Important boundary:` as a standalone labeled block inside `## 1. Problem Statement`, followed by bullets. Do not turn it into a standalone section.
     - Use a numbered list for `### 3.1 Main Components` in the form `1. `Component Name`` followed by indented responsibility bullets.
+    - Use a numbered list for `### 3.2 Abstraction Levels` in the form `1. `Layer Name`` followed by indented responsibility bullets.
     - For entities, use `#### 4.1.x EntityName`, then `Fields:`, then field lines in the form `- `field_name` (type, constraints)` with indented semantic bullets and optional `Default: `value`` lines.
     - Use logical field types (`string`, `integer`, `boolean`, `timestamp`, `list of strings`, `map`, `string or null`), not implementation types.
-    - List external dependencies as systems or services, not low-level API method names, SDK calls, classes, or internal implementation choices.
+    - List external dependencies as systems or services, not low-level API method names, SDK calls, token mechanics, registry internals, classes, or internal implementation choices.
+    - Keep packet-named surfaces visible when they materially matter. If the source packet names teams separately from projects, preserve that distinction somewhere in the spec instead of collapsing it away.
+    - Keep the domain model conservative:
+      - include only entities materially supported by the brief
+      - prefer fewer entities over speculative completeness
+      - use minimal source-backed fields
+      - if a concept lacks enough support for a stable entity schema, keep it out of `## 4. Core Domain Model`
+    - In field lines, use only logical types and source-backed constraints.
+    - Do not put `required`, `optional`, `non-empty`, `unique`, or invented service-scope constraints inside the field parentheses.
+    - If requirement state matters, express it in the indented semantic bullet rather than inside the type parentheses.
     - Preserve uncertainty where the source packet is in transition.
     - Avoid implementation detail.
+    - If `unresolved_questions` are materially important, add `## 5. Open Questions` after the domain model and render them as markdown bullets.
     - Optional extra sections are allowed only when the brief materially needs them; if used, place them after `## 4. Core Domain Model`.
     - Do not add end markers, appendix-only filler, or operational/program-management sections unless the brief explicitly requires them.
     - If `existing_spec` is present, treat this as update mode:
@@ -95,7 +121,11 @@ function EvaluateSpecDocument(
     - Grade against the expected criteria explicitly.
     - Penalize invented capabilities, invented certainty, or implementation leakage.
     - Reward correct scope boundaries and careful handling of transition states.
-    - Penalize missing core template sections, malformed field formatting, or moving `Important boundary:` out of the Problem Statement block.
+    - Penalize missing core template sections, missing `### 3.2 Abstraction Levels`, missing `### 3.3 External Dependencies`, malformed field formatting, or moving `Important boundary:` out of the Problem Statement block.
+    - Penalize collapsing packet-named surfaces away when they matter. For example, if the packet explicitly names teams separately from projects, omitting team/workspace context entirely should count against the candidate.
+    - Penalize inferred internals such as token issuance, allowlists, registries, transport details, or storage choices unless the packet states them directly.
+    - Penalize domain models that look schema-complete but are not source-backed.
+    - Reward conservative entity modeling and explicit `Open Questions` when the packet is genuinely transitional.
     - Use `Pass`, `Partial`, or `Fail` for each criterion.
 
     {{ ctx.output_format }}

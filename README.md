@@ -32,8 +32,9 @@ bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
 bun run eval:foundation -- update-lightfast-foundation-boundary-surface-question
 bun run eval:foundation -- update-lightfast-foundation-tighten-overreach
 bun run eval:spec -- create-from-vercel-mcp-source-packet
-bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --trials 3
-bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator update-lightfast-foundation-tighten-overreach --compare previous,profile:no-skill
+bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --eval-profile gate --trials 3
+bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator update-lightfast-foundation-tighten-overreach --eval-profile fast --compare previous,profile:no-skill
+bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-lightfast-founder-notes --eval-profile cross
 ```
 
 Each run writes packet, brief, candidate document, and evaluation report
@@ -71,6 +72,22 @@ Current comparison variants:
 - `profile:no-skill` — intentionally under-scaffolded baseline profile for
   measuring how much the foundation-specific prompt constraints matter
 
+Current eval profiles:
+
+- `fast` — candidate and judge both run on `openai/gpt-5.4-mini`
+- `gate` — candidate runs on `openai/gpt-5.4-mini`, judge runs on `openai/gpt-5.4`
+- `prod` — candidate uses the skill's default authoring model from `baml_src/clients.baml`, judge runs on `openai/gpt-5.4`
+- `cross` — candidate runs on `openai/gpt-5.4-mini`, judge runs on `anthropic/claude-opus-4-7`
+
+The default authoring client in each skill's `baml_src/clients.baml` is
+`openai/gpt-5.4` for higher-quality foundation/spec generation. Eval profiles
+override that default so the tuning loop can stay on cheaper candidate models.
+
+`fast` is the default when `--eval-profile` is omitted.
+Model profiles are applied as overlay fixtures, so prompt comparisons against
+`previous` or `profile:no-skill` stay on the same candidate/judge model split.
+The `cross` profile requires Anthropic model access through Vercel AI Gateway.
+
 Eval manifests also carry lightweight taxonomy metadata
 (`scenario_type`, `input_shape`, `ambiguity_level`, `domain_profile`,
 `primary_risks`) so benchmark runs can be grouped by failure mode. Shared
@@ -86,7 +103,7 @@ When `--trials N` is used, the run directory contains `trial-1/`, `trial-2/`,
 For other local commands that should inherit `.env`, use:
 
 ```bash
-bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-vercel-source-packet
+bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-vercel-source-packet
 ```
 
 ## License

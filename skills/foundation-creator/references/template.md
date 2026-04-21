@@ -3,6 +3,8 @@
 Use only the sections below unless the user explicitly asks for more.
 All headings in the final document must use markdown heading syntax exactly as
 shown here.
+All sections below except `What This Is` should use markdown bullets with `- `
+for each item.
 
 ## What This Is
 
@@ -31,7 +33,11 @@ shown here.
 ## Strategic Bets
 
 - {The notes suggest a bet on ...}
-- {There are visible signals that ...}
+- {The source material indicates ...}
+
+Match the lead phrase to the packet. Use `Public materials suggest...` only
+when the packet explicitly cites public docs, press releases, or other
+external sources.
 
 ## Open Questions
 
