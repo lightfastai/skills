@@ -89,6 +89,50 @@
         "expected_criteria": "fixtures/vercel_mcp/expected_criteria.md"
       },
       "files": ["fixtures/vercel_mcp/raw_notes.md"]
+    },
+    {
+      "id": 4,
+      "eval_name": "create-from-lightfast-founder-notes-packet",
+      "scenario_type": "founder_notes_ambiguity",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "agent_work_infrastructure",
+      "primary_risks": [
+        "foundation_language_drift",
+        "invented_capabilities",
+        "invented_certainty",
+        "implementation_leakage"
+      ],
+      "prompt": "Use the source packet in `fixtures/lightfast_founder_notes/raw_notes.md` to write a `SPEC.md` for a service called `Lightfast Workspace Coordinator`. Treat it as a concrete repo-native coordination service, not as a company-level foundation document. Preserve unresolved product tension only where it materially affects service behavior, and do not invent hidden workflow engines, background mutation, or autonomous execution powers.",
+      "expected_output": "A `SPEC.md` that frames `Lightfast Workspace Coordinator` as a long-running service that turns rough workspace requests into packetized artifact drafts, evaluation runs, and explicit review decisions; sets clear boundaries around human review, silent mutation, and downstream execution; preserves open questions about repo-native versus hosted operation and failed-eval follow-up ownership; and stays behavioral rather than strategic or implementation-specific.",
+      "expected_file": "fixtures/lightfast_founder_notes/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/lightfast_founder_notes/raw_notes.md",
+        "expected_criteria": "fixtures/lightfast_founder_notes/expected_criteria.md"
+      },
+      "files": ["fixtures/lightfast_founder_notes/raw_notes.md"]
+    },
+    {
+      "id": 5,
+      "eval_name": "create-from-harbor-care-coordination-packet",
+      "scenario_type": "cross_domain_generalization",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "care_operations",
+      "primary_risks": [
+        "source_overfitting",
+        "invented_capabilities",
+        "invented_certainty",
+        "implementation_leakage"
+      ],
+      "prompt": "Use the source packet in `fixtures/harbor_care_coordination/raw_notes.md` to write a `SPEC.md` for a service called `Harbor Care Coordination Service`. Treat it as a trust-heavy care-coordination service, not as a developer tool, company foundation document, or clinical decision system. Preserve uncertainty where the packet leaves the automation boundary unresolved, and do not invent medical authority, compliance machinery, or detailed healthcare schemas.",
+      "expected_output": "A `SPEC.md` that frames `Harbor Care Coordination Service` as a long-running care-coordination service for turning messy referrals, intake notes, and follow-up events into a shared case timeline, explicit task ownership, and handoff tracking; keeps human advocates central; sets clear non-goals around clinical guidance, telehealth, EHR, insurer claims, and marketplace behavior; and remains behavioral rather than implementation-heavy.",
+      "expected_file": "fixtures/harbor_care_coordination/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/harbor_care_coordination/raw_notes.md",
+        "expected_criteria": "fixtures/harbor_care_coordination/expected_criteria.md"
+      },
+      "files": ["fixtures/harbor_care_coordination/raw_notes.md"]
     }
   ]
 }
