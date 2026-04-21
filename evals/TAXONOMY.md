@@ -72,9 +72,15 @@ values:
 
 ## Current expansion priority
 
+The comparison harness now supports:
+
+- `current` — working tree skill
+- `previous` — `HEAD~1` snapshot
+- `profile:no-skill` — intentionally under-scaffolded baseline
+
 The next missing slices are:
 
-- baseline comparison runs (`current skill` vs `previous skill` / `no skill`)
-  when the local harness is ready to compare deltas directly
+- comparison coverage on more packets so prompt changes are judged by deltas,
+  not only by isolated pass/fail runs
 - optional Braintrust-style scorer/export integration if local JSON artifacts are
   no longer sufficient for experiment tracking

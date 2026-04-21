@@ -33,6 +33,7 @@ bun run eval:foundation -- update-lightfast-foundation-boundary-surface-question
 bun run eval:foundation -- update-lightfast-foundation-tighten-overreach
 bun run eval:spec -- create-from-vercel-mcp-source-packet
 bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --trials 3
+bun run with-env -- bun run ./scripts/run-baml-eval.mjs foundation-creator update-lightfast-foundation-tighten-overreach --compare previous,profile:no-skill
 ```
 
 Each run writes packet, brief, candidate document, and evaluation report
@@ -55,6 +56,20 @@ The runner now also writes:
 - `summary.json` — per-trial LLM status + combined status
 - `benchmark.json` — aggregated status counts and timing summaries across all
   trials
+
+When `--compare` is used, the run directory also includes:
+
+- `comparison.json` — head-to-head summary across variants, all judged by the
+  current skill's evaluator
+- `variants/<label>/...` — per-variant packet/brief/candidate/report artifacts
+  and `benchmark.json`
+
+Current comparison variants:
+
+- `current` — working tree prompt stack
+- `previous` — `HEAD~1` snapshot of the skill
+- `profile:no-skill` — intentionally under-scaffolded baseline profile for
+  measuring how much the foundation-specific prompt constraints matter
 
 Eval manifests also carry lightweight taxonomy metadata
 (`scenario_type`, `input_shape`, `ambiguity_level`, `domain_profile`,

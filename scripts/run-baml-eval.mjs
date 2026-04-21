@@ -1,4 +1,5 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
@@ -120,6 +121,7 @@ async function loadText(filePath) {
 function parseArgs(argv) {
   const positionals = [];
   let trials = 1;
+  let compare = [];
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -137,6 +139,19 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--compare") {
+      const next = argv[index + 1];
+      if (!next) {
+        fail("Missing value after --compare.");
+      }
+      compare = next
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      index += 1;
+      continue;
+    }
+
     positionals.push(arg);
   }
 
@@ -144,7 +159,122 @@ function parseArgs(argv) {
     skillName: positionals[0],
     selector: positionals[1],
     trials,
+    compare,
   };
+}
+
+function shellEscape(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function slugifyVariantLabel(label) {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "variant";
+}
+
+function compareStatuses(left, right) {
+  return STATUS_RANK[left] - STATUS_RANK[right];
+}
+
+function parseVariantSpec(rawValue) {
+  const value = rawValue.trim();
+
+  if (value === "current") {
+    return {
+      key: "current",
+      label: "current",
+      kind: "current",
+      source: {
+        type: "working_tree",
+      },
+    };
+  }
+
+  if (value === "previous") {
+    return {
+      key: "previous",
+      label: "previous",
+      kind: "git",
+      ref: "HEAD~1",
+      source: {
+        type: "git",
+        ref: "HEAD~1",
+      },
+    };
+  }
+
+  if (value === "no-skill") {
+    return {
+      key: "profile:no-skill",
+      label: "profile:no-skill",
+      kind: "profile",
+      profileName: "no-skill",
+      source: {
+        type: "profile",
+        name: "no-skill",
+      },
+    };
+  }
+
+  if (value.startsWith("profile:")) {
+    const profileName = value.slice("profile:".length).trim();
+    if (profileName.length === 0) {
+      fail("Profile comparison variant is missing a name.");
+    }
+    return {
+      key: `profile:${profileName}`,
+      label: `profile:${profileName}`,
+      kind: "profile",
+      profileName,
+      source: {
+        type: "profile",
+        name: profileName,
+      },
+    };
+  }
+
+  if (value.startsWith("git:")) {
+    const ref = value.slice("git:".length).trim();
+    if (ref.length === 0) {
+      fail("Git comparison variant is missing a ref.");
+    }
+    return {
+      key: `git:${ref}`,
+      label: `git:${ref}`,
+      kind: "git",
+      ref,
+      source: {
+        type: "git",
+        ref,
+      },
+    };
+  }
+
+  fail(
+    `Unknown comparison variant '${rawValue}'. Use current, previous, no-skill, profile:<name>, or git:<ref>.`,
+  );
+}
+
+function buildVariantPlan(compareSpecs) {
+  if (compareSpecs.length === 0) {
+    return [parseVariantSpec("current")];
+  }
+
+  const variants = [parseVariantSpec("current"), ...compareSpecs.map(parseVariantSpec)];
+  const deduped = [];
+  const seen = new Set();
+
+  for (const variant of variants) {
+    if (seen.has(variant.key)) {
+      continue;
+    }
+    seen.add(variant.key);
+    deduped.push(variant);
+  }
+
+  return deduped;
 }
 
 function getEvalBySelector(evals, selector) {
@@ -216,6 +346,90 @@ async function buildPacket(evalEntry, evalsDir, packetType) {
   }
 
   return packet;
+}
+
+function shouldCopySkillPath(relativePath) {
+  const normalizedPath = relativePath.split(path.sep).join("/");
+
+  if (normalizedPath.length === 0) {
+    return true;
+  }
+
+  return !(
+    normalizedPath === "baml_client" ||
+    normalizedPath.startsWith("baml_client/") ||
+    normalizedPath === "baml_client_dist" ||
+    normalizedPath.startsWith("baml_client_dist/") ||
+    normalizedPath === "evals/runs" ||
+    normalizedPath.startsWith("evals/runs/")
+  );
+}
+
+async function cloneSkillRoot(sourceSkillRoot, destinationSkillRoot) {
+  await cp(sourceSkillRoot, destinationSkillRoot, {
+    recursive: true,
+    force: true,
+    filter: (sourcePath) => shouldCopySkillPath(path.relative(sourceSkillRoot, sourcePath)),
+  });
+}
+
+async function materializeGitSkillRoot(skillName, ref, workspaceRoot) {
+  const repoRelativeSkillPath = path.posix.join("skills", skillName);
+  const archiveCommand = [
+    "git archive --format=tar",
+    shellEscape(ref),
+    shellEscape(repoRelativeSkillPath),
+    "| tar -x -C",
+    shellEscape(workspaceRoot),
+  ].join(" ");
+
+  await runCommand("bash", ["-lc", archiveCommand], repoRoot);
+  return path.join(workspaceRoot, "skills", skillName);
+}
+
+async function materializeVariantSkillRoot(skillName, baseSkillRoot, variant) {
+  if (variant.kind === "current") {
+    return {
+      skillRoot: baseSkillRoot,
+      cleanupRoot: null,
+    };
+  }
+
+  const workspaceRoot = await mkdtemp(
+    path.join(os.tmpdir(), `lightfast-skill-eval-${slugifyVariantLabel(variant.label)}-`),
+  );
+
+  if (variant.kind === "git") {
+    const skillRoot = await materializeGitSkillRoot(skillName, variant.ref, workspaceRoot);
+    return {
+      skillRoot,
+      cleanupRoot: workspaceRoot,
+    };
+  }
+
+  if (variant.kind === "profile") {
+    const skillRoot = path.join(workspaceRoot, "skills", skillName);
+    const profileRoot = path.join(baseSkillRoot, "eval_profiles", variant.profileName);
+
+    try {
+      await access(profileRoot);
+    } catch {
+      fail(`Comparison profile '${variant.profileName}' not found at ${profileRoot}.`);
+    }
+
+    await cloneSkillRoot(baseSkillRoot, skillRoot);
+    await cp(profileRoot, skillRoot, {
+      recursive: true,
+      force: true,
+    });
+
+    return {
+      skillRoot,
+      cleanupRoot: workspaceRoot,
+    };
+  }
+
+  fail(`Unsupported variant kind '${variant.kind}'.`);
 }
 
 async function ensureFreshClient(skillRoot) {
@@ -840,30 +1054,39 @@ async function runDeterministicChecks(skillRoot, validationContract, candidateDo
 async function runSingleTrial({
   evalEntry,
   evalsDir,
-  generated,
+  candidateGenerated,
+  judgeGenerated,
   runner,
   skillRoot,
   validationContract,
 }) {
-  const { b } = generated;
+  const { b: candidateClient } = candidateGenerated;
+  const { b: judgeClient } = judgeGenerated;
   const packet = await buildPacket(evalEntry, evalsDir, runner.packet_type);
   const compileFnName = runner.compile_brief_function;
   const renderFnName = runner.render_document_function;
   const evaluateFnName = runner.evaluate_document_function;
 
   if (
-    typeof b[compileFnName] !== "function" ||
-    typeof b[renderFnName] !== "function" ||
-    typeof b[evaluateFnName] !== "function"
+    typeof candidateClient[compileFnName] !== "function" ||
+    typeof candidateClient[renderFnName] !== "function"
   ) {
-    fail(`Generated client is missing one or more runner functions for '${path.basename(skillRoot)}'.`);
+    fail(
+      `Generated client is missing one or more compile/render runner functions for '${path.basename(skillRoot)}'.`,
+    );
+  }
+
+  if (typeof judgeClient[evaluateFnName] !== "function") {
+    fail(
+      `Judge client is missing evaluate runner function '${evaluateFnName}' for '${path.basename(skillRoot)}'.`,
+    );
   }
 
   const timing = {};
   const startedAt = Date.now();
 
   const compileStartedAt = Date.now();
-  const brief = await b[compileFnName](packet);
+  const brief = await candidateClient[compileFnName](packet);
   timing.compile_ms = Date.now() - compileStartedAt;
 
   if (runner.packet_type === "SpecEvalPacket") {
@@ -881,7 +1104,7 @@ async function runSingleTrial({
   }
 
   const renderStartedAt = Date.now();
-  const candidateDocument = await b[renderFnName](brief);
+  const candidateDocument = await candidateClient[renderFnName](brief);
   timing.render_ms = Date.now() - renderStartedAt;
 
   const deterministicStartedAt = Date.now();
@@ -893,7 +1116,7 @@ async function runSingleTrial({
   timing.deterministic_ms = Date.now() - deterministicStartedAt;
 
   const evaluateStartedAt = Date.now();
-  const report = await b[evaluateFnName](packet, candidateDocument);
+  const report = await judgeClient[evaluateFnName](packet, candidateDocument);
   timing.evaluate_ms = Date.now() - evaluateStartedAt;
   timing.total_ms = Date.now() - startedAt;
 
@@ -914,6 +1137,66 @@ async function runSingleTrial({
       combined_status,
       deterministic_pass: deterministic_checks.overall_pass,
     },
+  };
+}
+
+async function runVariantTrials({
+  artifactDir,
+  candidateGenerated,
+  evalEntry,
+  evalsDir,
+  judgeGenerated,
+  runner,
+  skillName,
+  skillRoot,
+  trials,
+  validationContract,
+  variant,
+}) {
+  const trialResults = [];
+
+  for (let trialIndex = 0; trialIndex < trials; trialIndex += 1) {
+    const trialResult = await runSingleTrial({
+      evalEntry,
+      evalsDir,
+      candidateGenerated,
+      judgeGenerated,
+      runner,
+      skillRoot,
+      validationContract,
+    });
+    trialResults.push(trialResult);
+
+    const trialArtifacts = {
+      "packet.json": trialResult.packet,
+      "brief.json": trialResult.brief,
+      "candidate.md": trialResult.candidateDocument,
+      "report.json": trialResult.report,
+      "deterministic_checks.json": trialResult.deterministic_checks,
+      "timing.json": trialResult.timing,
+      "summary.json": trialResult.summary,
+    };
+
+    if (trials === 1) {
+      await writeRunArtifacts(artifactDir, trialArtifacts);
+    } else {
+      await writeRunArtifacts(path.join(artifactDir, `trial-${trialIndex + 1}`), trialArtifacts);
+    }
+  }
+
+  const benchmark = {
+    ...buildBenchmark(skillName, evalEntry.eval_name, trialResults),
+    eval_metadata: extractEvalMetadata(evalEntry),
+    variant,
+  };
+
+  await writeRunArtifacts(artifactDir, {
+    "benchmark.json": benchmark,
+  });
+
+  return {
+    benchmark,
+    trialResults,
   };
 }
 
@@ -996,12 +1279,102 @@ function extractEvalMetadata(evalEntry) {
   );
 }
 
+function compareBenchmarks(left, right) {
+  const leftSummary = left.benchmark_summary;
+  const rightSummary = right.benchmark_summary;
+
+  const combinedOrder = compareStatuses(
+    leftSummary.combined_worst_status,
+    rightSummary.combined_worst_status,
+  );
+  if (combinedOrder !== 0) {
+    return combinedOrder;
+  }
+
+  const llmOrder = compareStatuses(leftSummary.llm_worst_status, rightSummary.llm_worst_status);
+  if (llmOrder !== 0) {
+    return llmOrder;
+  }
+
+  return rightSummary.deterministic_pass_rate - leftSummary.deterministic_pass_rate;
+}
+
+function buildComparisonReport(skillName, evalEntry, variantResults) {
+  const currentVariant = variantResults.find((variantResult) => variantResult.variant.key === "current");
+  const rankedVariants = [...variantResults]
+    .sort((left, right) => compareBenchmarks(left.benchmark, right.benchmark))
+    .map((variantResult, index) => ({
+      rank: index + 1,
+      label: variantResult.variant.label,
+      combined_worst_status: variantResult.benchmark.benchmark_summary.combined_worst_status,
+      llm_worst_status: variantResult.benchmark.benchmark_summary.llm_worst_status,
+      deterministic_pass_rate: variantResult.benchmark.benchmark_summary.deterministic_pass_rate,
+    }));
+
+  const currentVsBaselines = currentVariant
+    ? variantResults
+        .filter((variantResult) => variantResult.variant.key !== "current")
+        .map((variantResult) => ({
+          label: variantResult.variant.label,
+          combined_worst_status_relative_to_current:
+            compareStatuses(
+              variantResult.benchmark.benchmark_summary.combined_worst_status,
+              currentVariant.benchmark.benchmark_summary.combined_worst_status,
+            ) < 0
+              ? "better"
+              : compareStatuses(
+                    variantResult.benchmark.benchmark_summary.combined_worst_status,
+                    currentVariant.benchmark.benchmark_summary.combined_worst_status,
+                  ) > 0
+                ? "worse"
+                : "same",
+          llm_worst_status_relative_to_current:
+            compareStatuses(
+              variantResult.benchmark.benchmark_summary.llm_worst_status,
+              currentVariant.benchmark.benchmark_summary.llm_worst_status,
+            ) < 0
+              ? "better"
+              : compareStatuses(
+                    variantResult.benchmark.benchmark_summary.llm_worst_status,
+                    currentVariant.benchmark.benchmark_summary.llm_worst_status,
+                  ) > 0
+                ? "worse"
+                : "same",
+          deterministic_pass_rate_delta: Number(
+            (
+              variantResult.benchmark.benchmark_summary.deterministic_pass_rate -
+              currentVariant.benchmark.benchmark_summary.deterministic_pass_rate
+            ).toFixed(2),
+          ),
+        }))
+    : [];
+
+  return {
+    skill_name: skillName,
+    eval_name: evalEntry.eval_name,
+    trial_count: variantResults[0]?.benchmark.trial_count ?? 0,
+    judge_variant: "current",
+    eval_metadata: extractEvalMetadata(evalEntry),
+    variants: variantResults.map((variantResult) => ({
+      label: variantResult.variant.label,
+      source: variantResult.variant.source,
+      run_subdir: variantResult.run_subdir,
+      benchmark_summary: variantResult.benchmark.benchmark_summary,
+      judge_status_counts: variantResult.benchmark.judge_status_counts,
+      combined_status_counts: variantResult.benchmark.combined_status_counts,
+      timing_ms: variantResult.benchmark.timing_ms,
+    })),
+    ranking: rankedVariants,
+    current_vs_baselines: currentVsBaselines,
+  };
+}
+
 async function main() {
-  const { skillName, selector, trials } = parseArgs(process.argv.slice(2));
+  const { skillName, selector, trials, compare } = parseArgs(process.argv.slice(2));
 
   if (!skillName) {
     fail(
-      "Usage: bun run ./scripts/run-baml-eval.mjs <foundation-creator|spec-creator> [eval-id-or-name] [--trials N]",
+      "Usage: bun run ./scripts/run-baml-eval.mjs <foundation-creator|spec-creator> [eval-id-or-name] [--trials N] [--compare previous,profile:no-skill]",
     );
   }
 
@@ -1010,6 +1383,8 @@ async function main() {
   const manifestPath = path.join(evalsDir, "evals.json");
   const manifest = await loadJson(manifestPath);
   const evalEntry = getEvalBySelector(manifest.evals, selector);
+  const variants = buildVariantPlan(compare);
+  const compareMode = compare.length > 0 || variants.length > 1;
   const runner = manifest.runner_contract;
   const validationContract = evalEntry.validation_contract ?? manifest.validation_contract ?? null;
 
@@ -1022,51 +1397,75 @@ async function main() {
   }
 
   await ensureFreshClient(skillRoot);
-  const generated = await importGeneratedClient(skillRoot);
+  const judgeGenerated = await importGeneratedClient(skillRoot);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runDir = path.join(skillRoot, "evals", "runs", `${timestamp}-${evalEntry.eval_name}`);
-  const trialResults = [];
+  const cleanupRoots = [];
 
-  for (let trialIndex = 0; trialIndex < trials; trialIndex += 1) {
-    const trialResult = await runSingleTrial({
-      evalEntry,
-      evalsDir,
-      generated,
-      runner,
-      skillRoot,
-      validationContract,
-    });
-    trialResults.push(trialResult);
+  try {
+    const variantResults = [];
 
-    const trialArtifacts = {
-      "packet.json": trialResult.packet,
-      "brief.json": trialResult.brief,
-      "candidate.md": trialResult.candidateDocument,
-      "report.json": trialResult.report,
-      "deterministic_checks.json": trialResult.deterministic_checks,
-      "timing.json": trialResult.timing,
-      "summary.json": trialResult.summary,
-    };
+    for (const variant of variants) {
+      const preparedVariant = await materializeVariantSkillRoot(skillName, skillRoot, variant);
+      if (preparedVariant.cleanupRoot) {
+        cleanupRoots.push(preparedVariant.cleanupRoot);
+      }
 
-    if (trials === 1) {
-      await writeRunArtifacts(runDir, trialArtifacts);
-    } else {
-      await writeRunArtifacts(path.join(runDir, `trial-${trialIndex + 1}`), trialArtifacts);
+      let candidateGenerated = judgeGenerated;
+      if (variant.kind !== "current") {
+        await ensureFreshClient(preparedVariant.skillRoot);
+        candidateGenerated = await importGeneratedClient(preparedVariant.skillRoot);
+      }
+
+      const artifactDir = compareMode
+        ? path.join(runDir, "variants", slugifyVariantLabel(variant.label))
+        : runDir;
+
+      const variantRun = await runVariantTrials({
+        artifactDir,
+        candidateGenerated,
+        evalEntry,
+        evalsDir,
+        judgeGenerated,
+        runner,
+        skillName,
+        skillRoot,
+        trials,
+        validationContract,
+        variant,
+      });
+
+      variantResults.push({
+        variant,
+        benchmark: variantRun.benchmark,
+        run_subdir: path.relative(runDir, artifactDir).split(path.sep).join("/"),
+      });
     }
+
+    if (compareMode) {
+      const comparison = buildComparisonReport(skillName, evalEntry, variantResults);
+      await writeRunArtifacts(runDir, {
+        "comparison.json": comparison,
+      });
+
+      console.log(`Run complete: ${runDir}`);
+      console.log(`Trials per variant: ${trials}`);
+      for (const variantResult of variantResults) {
+        console.log(
+          `${variantResult.variant.label}: LLM ${variantResult.benchmark.benchmark_summary.llm_worst_status}, Combined ${variantResult.benchmark.benchmark_summary.combined_worst_status}, Deterministic ${variantResult.benchmark.benchmark_summary.deterministic_pass_rate}`,
+        );
+      }
+      return;
+    }
+
+    const benchmark = variantResults[0].benchmark;
+    console.log(`Run complete: ${runDir}`);
+    console.log(`Trials: ${trials}`);
+    console.log(`LLM worst status: ${benchmark.benchmark_summary.llm_worst_status}`);
+    console.log(`Combined worst status: ${benchmark.benchmark_summary.combined_worst_status}`);
+  } finally {
+    await Promise.all(cleanupRoots.map((cleanupRoot) => rm(cleanupRoot, { recursive: true, force: true })));
   }
-
-  const benchmark = {
-    ...buildBenchmark(skillName, evalEntry.eval_name, trialResults),
-    eval_metadata: extractEvalMetadata(evalEntry),
-  };
-  await writeRunArtifacts(runDir, {
-    "benchmark.json": benchmark,
-  });
-
-  console.log(`Run complete: ${runDir}`);
-  console.log(`Trials: ${trialResults.length}`);
-  console.log(`LLM worst status: ${benchmark.benchmark_summary.llm_worst_status}`);
-  console.log(`Combined worst status: ${benchmark.benchmark_summary.combined_worst_status}`);
 }
 
 main().catch((error) => {
