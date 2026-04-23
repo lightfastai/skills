@@ -3,6 +3,9 @@
   "private": true,
   "packageManager": "bun@1.3.9",
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "with-env": "dotenv -e .env --",
     "baml:generate:foundation": "node ./node_modules/@boundaryml/baml/cli.js generate --from ./skills/foundation-creator/baml_src",
@@ -19,7 +22,7 @@
     "typescript": "5.9.3"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "24",
     "braintrust": "^3.9.0",
     "dotenv-cli": "^8.0.0"
   }
