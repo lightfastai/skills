@@ -27,6 +27,7 @@ This repo now includes BAML-backed fixture evals for `foundation-creator` and
 
 ```bash
 bun install
+bun run ci:check
 bun run eval:typecheck
 bun run eval:foundation -- create-foundation-from-vercel-source-packet
 bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
@@ -154,6 +155,12 @@ When `--trials N` is used, the run directory contains `trial-1/`, `trial-2/`,
 `bun run eval:*` loads `.env` automatically through `dotenv-cli`, so
 `AI_GATEWAY_API_KEY` can live in the repo-local `.env` without manual
 `source` steps.
+
+CI runs `bun run ci:check` on every pull request and push to `main`. Live smoke
+evals run only when `AI_GATEWAY_API_KEY` is configured in GitHub Actions
+secrets. Braintrust export remains optional: if `BRAINTRUST_API_KEY` is present,
+CI uses `local,braintrust`; otherwise local JSON artifacts remain the source of
+truth.
 
 For other local commands that should inherit `.env`, use:
 
