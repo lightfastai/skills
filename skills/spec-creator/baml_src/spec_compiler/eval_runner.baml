@@ -43,6 +43,7 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
     - Prefer systems, resources, and external services over actor roles in `external_dependencies`.
     - If the packet explicitly names a specific human authority as part of the external dependency boundary to keep the runtime honest, preserve that role as a qualified human dependency as well as an `actor`. This should be rare and should apply only to packet-explicit human review, advocate, or approval boundaries, not to general participant lists.
     - Do not list general participant roles such as family caregivers, patients, providers, reviewers, or approvers under `external_dependencies` just because they appear in the packet. Keep those in `actors`, boundaries, or escalation flows unless the packet explicitly frames a narrower human authority as part of the dependency boundary.
+    - Do not list reviewers or approvers in `external_dependencies` merely because the service has a human review gate. Keep them as actors or boundary language unless the packet explicitly defines an external review authority or external review service.
     - When the packet mentions approved clients, consent, or endpoint verification, keep that as a source-visible boundary or restriction. Do not turn it into an approval-state object, internal control process, or hidden eligibility system.
     - Keep approved-client wording as `approved clients` or `approved-client restrictions`. Do not paraphrase it as allowlists, client registration, registry management, eligibility status, or similar internal process language unless the packet states that mechanism.
     - `entities` should model only externally meaningful nouns the service manipulates or exposes. Do not create entities only to complete a plausible schema.
@@ -52,6 +53,7 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
     - When two labels may describe overlapping context, such as team versus workspace context, keep the ambiguity explicit instead of multiplying entities.
     - Do not add umbrella subject fields such as `subject`, `case_subject`, `party`, or similarly generalized placeholders when the packet already frames participants or care context more concretely. Prefer packet-backed wording or omit the field.
     - Every entity field must be directly supported by the packet or be the minimal identity/status field required to keep the entity coherent. Prefer fewer fields over speculative completeness.
+    - If the packet mentions lightweight status states while warning against full workflow or BPM modeling, do not add generic `status` fields to entities unless the status values are directly source-backed and essential to the record.
     - When the packet describes a transition-state resource surface rather than a record-centric system, default to the sparsest viable entities. One minimal identifying field may be enough.
     - Do not infer relationship fields, lifecycle/status fields, or embedded collections such as `project_id`, `status`, or `logs` unless the packet clearly supports them.
     - Do not add audit-style fields such as `change_note`, `decided_at`, revision metadata, or extra timestamps solely because the packet mentions history or traceability. Keep history in components or prose unless the record field itself is source-backed.
@@ -112,12 +114,15 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
       - `# <Service Name> Specification`
       - `Status: Draft v1 (language-agnostic)`
       - `Purpose: <one sentence>`
-    - Require the `Purpose:` line to name the service kind, the protected endpoint or access boundary, and the main resource surfaces at the highest stable granularity the brief supports.
+    - If `brief.purpose` is already source-bound and concrete, use it as the `Purpose:` line with only minor grammar trimming. Do not introduce new concepts while rewriting it.
+    - Require the `Purpose:` line to name the service kind and main source-backed ingress, resource, or coordination surfaces at the highest stable granularity the brief supports.
+    - Name a protected endpoint, security boundary, or access boundary in the `Purpose:` line only when the brief explicitly supports one.
     - If the brief names surfaces like docs, teams, projects, deployments, or logs, mention them explicitly in the `Purpose:` line rather than replacing them with vague phrases like `operational context`.
     - If `service_surfaces` are present, mention at least one stable service surface from that list in the `Purpose:` line or opening Problem Statement paragraph.
     - If the brief centers a stable coordination surface such as a shared case, timeline, inbox, queue, or record, mention at least one such surface explicitly in the `Purpose:` line.
     - If the brief carries a tentative but source-backed coordination surface such as an inbox, queue, or shared record, keep that surface visible in the `Purpose:` line or opening Problem Statement paragraph rather than flattening it into pipeline-only language.
-    - If the brief mentions OAuth, consent, approved clients, or secure access, the `Purpose:` line must explicitly say `OAuth-protected` or `secure, OAuth-protected` rather than leaving that security detail to later sections.
+    - If the brief mentions OAuth, consent, approved clients, endpoint verification, or secure access, the `Purpose:` line must explicitly say `OAuth-protected` or `secure, OAuth-protected` rather than leaving that security detail to later sections.
+    - Do not add `secure`, `secure access`, `protected`, or `OAuth-protected` to the `Purpose:` line unless the brief explicitly mentions OAuth, consent, approved clients, endpoint verification, or secure access.
     - If the brief is fundamentally about coordination across named participant types, roles, or organizations, mention that cross-party coordination boundary in the `Purpose:` line instead of only naming artifacts or records.
     - If `actors` are present, use them to describe who coordination happens across.
     - Do not restate general participant actors as external dependencies just to make them visible. A role may appear in both places only when the brief explicitly preserves a packet-stated human authority dependency boundary.
@@ -158,6 +163,7 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
     - Prefer systems and external services over actor roles in `### 3.3 External Dependencies`.
     - If the packet or brief explicitly frames a specific human authority as part of the external dependency boundary, keep that role in `### 3.3 External Dependencies` with qualified wording such as `human advocate review, when escalation is required`.
     - Do not list general participant roles such as family caregivers, patients, providers, reviewers, or approvers in `### 3.3 External Dependencies` just because the packet emphasizes a human boundary.
+    - Do not list reviewers or approvers in `### 3.3 External Dependencies` merely because the service has a human review gate. Keep them visible in actors, boundaries, or review components unless the packet or brief explicitly defines an external review authority or external review service.
     - If `actors` are present, reflect them in the Problem Statement, Purpose, or component responsibilities instead of moving them wholesale into `### 3.3 External Dependencies`.
     - When a dependency is fundamentally about communicating with external parties, phrase the dependency as a communication channel, interface, or information source rather than as a bare list of counterparties.
     - If the brief mentions approved-client restrictions, keep that phrased as a boundary or restriction, not as an approval-state system or internal status object.
@@ -186,12 +192,13 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
       - avoid component names like `gate` or dependency phrases like `client status` when the brief only supports externally visible access restrictions
       - keep entity count modest; more than roughly six entities should be rare and strongly justified by the brief
     - In field lines, use only logical types and source-backed constraints.
+    - Do not add generic `status` fields just because a brief or packet mentions lightweight state. Include status fields only when the source makes status values essential and not merely a warning against over-modeling workflow state.
     - Do not put `required`, `optional`, `non-empty`, `unique`, or invented service-scope constraints inside the field parentheses.
     - If requirement state matters, express it in the indented semantic bullet rather than inside the type parentheses.
     - Preserve uncertainty where the source packet is in transition.
     - Avoid implementation detail.
-    - If `unresolved_questions` are materially important, add `## 5. Open Questions` after the domain model and render them as markdown bullets.
-    - When `unresolved_questions` are present, render every materially distinct item from the brief exactly once. Do not drop one for brevity or substitute only a subset.
+    - If `unresolved_questions` is non-empty, add `## 5. Open Questions` after the domain model and render every question as a markdown bullet.
+    - When `unresolved_questions` are present, render every materially distinct item from the brief exactly once. Do not drop one for brevity, substitute only a subset, or move the questions only into boundary prose.
     - When multiple unresolved questions are present, preserve the distinct tensions rather than reducing them to a single generic question.
     - Keep `## 5. Open Questions` source-bound. If the brief names a structural tension such as repo-native vs hosted, family-direct vs sponsored, or automation vs human ownership, carry that tension forward explicitly.
     - When the source packet includes explicit `Unresolved:` bullets, keep those questions source-traceable in `## 5. Open Questions` rather than substituting different questions.
