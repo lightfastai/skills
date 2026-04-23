@@ -228,6 +228,260 @@ function dedupeStrings(values) {
   return deduped;
 }
 
+function normalizeMatchText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[`"'’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const COMPARABLE_STOP_WORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "that",
+  "this",
+  "from",
+  "into",
+  "through",
+  "within",
+  "under",
+  "over",
+  "while",
+  "where",
+  "when",
+  "than",
+  "then",
+  "only",
+  "just",
+  "more",
+  "less",
+  "same",
+  "does",
+  "doesnt",
+  "not",
+  "are",
+  "is",
+  "was",
+  "were",
+  "be",
+  "being",
+  "been",
+  "can",
+  "could",
+  "should",
+  "would",
+  "will",
+  "may",
+  "might",
+  "must",
+  "have",
+  "has",
+  "had",
+  "its",
+  "their",
+  "them",
+  "they",
+  "there",
+  "about",
+  "across",
+  "around",
+  "also",
+  "still",
+  "rather",
+  "than",
+  "such",
+  "those",
+  "these",
+  "service",
+  "packet",
+  "source",
+  "record",
+  "records",
+  "surface",
+  "surfaces",
+  "entity",
+  "entities",
+  "concept",
+  "concepts",
+  "label",
+  "labels",
+  "term",
+  "terms",
+  "context",
+]);
+
+function extractComparableWords(value) {
+  return new Set(
+    normalizeMatchText(value)
+      .split(" ")
+      .map((word) => word.trim())
+      .filter((word) => word.length >= 3 && !COMPARABLE_STOP_WORDS.has(word)),
+  );
+}
+
+function countWordOverlap(leftWords, rightWords) {
+  let overlap = 0;
+  for (const word of leftWords) {
+    if (rightWords.has(word)) {
+      overlap += 1;
+    }
+  }
+  return overlap;
+}
+
+function normalizeFieldName(value) {
+  return normalizeMatchText(value).replace(/\s+/g, "_");
+}
+
+const GENERIC_IDENTITY_FIELDS = new Set([
+  "id",
+  "name",
+  "slug",
+  "title",
+  "key",
+  "code",
+  "identifier",
+  "external_id",
+  "display_name",
+]);
+
+function entityUsesOnlyGenericIdentityFields(entity) {
+  const fields = Array.isArray(entity?.fields) ? entity.fields : [];
+
+  if (fields.length > 2) {
+    return false;
+  }
+
+  return fields.every((field) => GENERIC_IDENTITY_FIELDS.has(normalizeFieldName(field?.name)));
+}
+
+function collectSpecBriefContextTexts(brief, packet) {
+  return [
+    brief?.purpose,
+    ...(brief?.operational_problems ?? []),
+    ...(brief?.goals ?? []),
+    ...(brief?.non_goals ?? []),
+    ...(brief?.important_boundaries ?? []),
+    ...(brief?.external_dependencies ?? []),
+    ...(brief?.unresolved_questions ?? []),
+    packet?.raw_notes,
+    packet?.expected_criteria,
+  ].filter((value) => typeof value === "string" && value.trim().length > 0);
+}
+
+const ENTITY_ALIAS_AMBIGUITY_MARKERS = [
+  /\bdoes not resolve\b/i,
+  /\bpreferred term\b/i,
+  /\bsame underlying concept\b/i,
+  /\bsame service surface\b/i,
+  /\bdistinct surface\b/i,
+  /\bdistinct surfaces\b/i,
+  /\bdistinct concept\b/i,
+  /\bdistinct concepts\b/i,
+  /\bseparate concept\b/i,
+  /\bseparate concepts\b/i,
+  /\balias\b/i,
+  /\bversus\b/i,
+  /\bvs\.?\b/i,
+  /\bdo not collapse\b/i,
+  /\breferring to the same\b/i,
+];
+
+function textHasAliasAmbiguityMarker(text) {
+  return (
+    ENTITY_ALIAS_AMBIGUITY_MARKERS.some((pattern) => pattern.test(text)) ||
+    /\bteams?\b.*\bworkspace\b/i.test(text) ||
+    /\bworkspace\b.*\bteams?\b/i.test(text)
+  );
+}
+
+function findAmbiguousAliasEntityDecision(entity, brief, packet) {
+  if (!entityUsesOnlyGenericIdentityFields(entity)) {
+    return null;
+  }
+
+  const entityText = normalizeMatchText(
+    [
+      entity?.name,
+      entity?.description,
+      ...(entity?.fields ?? []).flatMap((field) => [field?.name, field?.description]),
+    ].join(" "),
+  );
+
+  if (!textHasAliasAmbiguityMarker(entityText)) {
+    return null;
+  }
+
+  const entityWords = extractComparableWords(entityText);
+  if (entityWords.size === 0) {
+    return null;
+  }
+
+  const matchingContext = collectSpecBriefContextTexts(brief, packet).find((contextText) => {
+    const normalizedContext = normalizeMatchText(contextText);
+    if (!textHasAliasAmbiguityMarker(normalizedContext)) {
+      return false;
+    }
+
+    return countWordOverlap(entityWords, extractComparableWords(normalizedContext)) >= 2;
+  });
+
+  if (!matchingContext) {
+    return null;
+  }
+
+  return {
+    entity_name: entity?.name ?? "Unnamed entity",
+    reason:
+      "Removed minimal entity because it models an explicitly ambiguous alias surface that the brief and packet keep unresolved.",
+    evidence: matchingContext,
+  };
+}
+
+function cloneEvalBrief(brief) {
+  if (typeof structuredClone === "function") {
+    return structuredClone(brief);
+  }
+
+  return JSON.parse(JSON.stringify(brief));
+}
+
+function normalizeCompiledBriefForRender({ skillName, packetType, brief, packet }) {
+  if (skillName !== "spec-creator" || packetType !== "SpecEvalPacket") {
+    return {
+      brief,
+      normalization: {
+        applied: false,
+        removed_entities: [],
+      },
+    };
+  }
+
+  const normalizedBrief = cloneEvalBrief(brief);
+  const removedEntities = [];
+
+  normalizedBrief.entities = (normalizedBrief.entities ?? []).filter((entity) => {
+    const decision = findAmbiguousAliasEntityDecision(entity, normalizedBrief, packet);
+    if (!decision) {
+      return true;
+    }
+
+    removedEntities.push(decision);
+    return false;
+  });
+
+  return {
+    brief: normalizedBrief,
+    normalization: {
+      applied: true,
+      removed_entities: removedEntities,
+    },
+  };
+}
+
 function getEvalProfilePreset(rawValue) {
   const value = rawValue?.trim() || "fast";
   const preset = EVAL_PROFILE_PRESETS[value];
@@ -649,16 +903,154 @@ function filterLinesByPatternSpecs(lines, patternSpecs = []) {
   );
 }
 
-function createPatternChecks(normalizedCandidate, patternChecks = [], expectedPresence = true) {
+function normalizeComparableHeading(value) {
+  return stripLeadingSectionNumber(normalizeHeading(value));
+}
+
+function extractMarkdownHeadingEntries(document) {
+  const lines = document.split(/\r?\n/);
+  const headings = [];
+
+  for (const [index, rawLine] of lines.entries()) {
+    const match = rawLine.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+    if (!match) {
+      continue;
+    }
+
+    headings.push({
+      index,
+      level: match[1].length,
+      title: normalizeLine(match[2]),
+      normalizedTitle: normalizeComparableHeading(match[2]),
+    });
+  }
+
+  return {
+    lines,
+    headings,
+  };
+}
+
+function removeReplaceableSectionContent(document, replaceableSections = []) {
+  if (replaceableSections.length === 0) {
+    return document;
+  }
+
+  const normalizedSpecs = replaceableSections
+    .map((sectionSpec) =>
+      typeof sectionSpec === "string"
+        ? {
+            title: sectionSpec,
+          }
+        : sectionSpec,
+    )
+    .filter((sectionSpec) => typeof sectionSpec?.title === "string")
+    .map((sectionSpec) => ({
+      normalizedTitle: normalizeComparableHeading(sectionSpec.title),
+      level: Number.isInteger(sectionSpec.level) ? sectionSpec.level : null,
+      removeHeading: sectionSpec.remove_heading === true,
+    }));
+
+  if (normalizedSpecs.length === 0) {
+    return document;
+  }
+
+  const { lines, headings } = extractMarkdownHeadingEntries(document);
+  const skippedLineIndexes = new Set();
+
+  for (let headingIndex = 0; headingIndex < headings.length; headingIndex += 1) {
+    const heading = headings[headingIndex];
+    const matchingSpec = normalizedSpecs.find((sectionSpec) => {
+      if (sectionSpec.normalizedTitle !== heading.normalizedTitle) {
+        return false;
+      }
+
+      if (sectionSpec.level !== null && sectionSpec.level !== heading.level) {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (!matchingSpec) {
+      continue;
+    }
+
+    let end = lines.length;
+    for (let nextIndex = headingIndex + 1; nextIndex < headings.length; nextIndex += 1) {
+      if (headings[nextIndex].level <= heading.level) {
+        end = headings[nextIndex].index;
+        break;
+      }
+    }
+
+    const start = matchingSpec.removeHeading ? heading.index : heading.index + 1;
+    for (let lineIndex = start; lineIndex < end; lineIndex += 1) {
+      skippedLineIndexes.add(lineIndex);
+    }
+  }
+
+  return lines
+    .filter((_, index) => !skippedLineIndexes.has(index))
+    .join("\n");
+}
+
+function findSectionBody(sectionMap, targetTitle) {
+  const normalizedTarget = stripLeadingSectionNumber(normalizeHeading(targetTitle));
+
+  for (const [title, body] of sectionMap.entries()) {
+    if (stripLeadingSectionNumber(normalizeHeading(title)) === normalizedTarget) {
+      return body ?? "";
+    }
+  }
+
+  return null;
+}
+
+function createPatternChecks(candidateDocument, patternChecks = [], expectedPresence = true) {
+  const normalizedCandidate = normalizeLine(candidateDocument);
+  const sectionBodies = extractFoundationSectionBodies(candidateDocument).bodies;
+
   return patternChecks.map((patternCheck) => {
     const expression = compilePatternSpec(patternCheck);
-    const matched = expression.test(normalizedCandidate);
+    const scopedText = patternCheck.section_title
+      ? findSectionBody(sectionBodies, patternCheck.section_title)
+      : candidateDocument;
+    const normalizedScopedText =
+      typeof scopedText === "string" ? normalizeLine(scopedText) : "";
+    const matched = expression.test(
+      patternCheck.section_title ? normalizedScopedText : normalizedCandidate,
+    );
     const passed = expectedPresence ? matched : !matched;
 
     return createCheck(
       patternCheck.id,
       passed,
       passed ? patternCheck.details_pass : patternCheck.details_fail,
+    );
+  });
+}
+
+function createPreservedSectionChecks(existingDocument, candidateDocument, preservedSections = []) {
+  if (preservedSections.length === 0) {
+    return [];
+  }
+
+  const existingSections = extractFoundationSectionBodies(existingDocument).bodies;
+  const candidateSections = extractFoundationSectionBodies(candidateDocument).bodies;
+
+  return preservedSections.map((sectionCheck) => {
+    const existingBody = findSectionBody(existingSections, sectionCheck.title);
+    const candidateBody = findSectionBody(candidateSections, sectionCheck.title);
+    const passed =
+      existingBody !== null &&
+      candidateBody !== null &&
+      normalizeLine(existingBody) === normalizeLine(candidateBody);
+
+    return createCheck(
+      sectionCheck.id,
+      passed,
+      passed ? sectionCheck.details_pass : sectionCheck.details_fail,
     );
   });
 }
@@ -704,25 +1096,25 @@ function extractFoundationDisallowedHeadings(templateText) {
 }
 
 function extractFoundationSectionBodies(candidateDocument) {
-  const lines = candidateDocument.split(/\r?\n/);
-  const sections = [];
-
-  for (const [index, rawLine] of lines.entries()) {
-    const match = rawLine.match(/^\s*##\s+(.+?)\s*$/);
-    if (match) {
-      sections.push({
-        title: normalizeLine(match[1]),
-        index,
-      });
-    }
-  }
-
+  const { lines, headings } = extractMarkdownHeadingEntries(candidateDocument);
+  const sections = headings.map((heading) => ({
+    title: heading.title,
+    index: heading.index,
+    level: heading.level,
+  }));
   const bodies = new Map();
   for (let index = 0; index < sections.length; index += 1) {
     const current = sections[index];
-    const next = sections[index + 1];
+    let end = lines.length;
+
+    for (let nextIndex = index + 1; nextIndex < sections.length; nextIndex += 1) {
+      if (sections[nextIndex].level <= current.level) {
+        end = sections[nextIndex].index;
+        break;
+      }
+    }
+
     const start = current.index + 1;
-    const end = next ? next.index : lines.length;
     bodies.set(current.title, lines.slice(start, end).join("\n").trim());
   }
 
@@ -1007,21 +1399,24 @@ function validateFoundationUpdateDocument(
   packet,
 ) {
   const baseChecks = validateFoundationDocument(candidateDocument, templateText, "", packet);
-  const existingBlocks = extractNormalizedMarkdownBlocks(existingFoundationText);
+  const filteredExistingFoundationText = removeReplaceableSectionContent(
+    existingFoundationText,
+    validationContract.replaceable_sections ?? [],
+  );
+  const existingBlocks = extractNormalizedMarkdownBlocks(filteredExistingFoundationText);
   const candidateBlocks = extractNormalizedMarkdownBlocks(candidateDocument);
-  const normalizedCandidate = normalizeLine(candidateDocument);
   const preservedExistingBlocks = filterLinesByPatternSpecs(
     existingBlocks,
     validationContract.allowed_removed_patterns ?? [],
   );
   const preservesExistingContent = linesAppearInOrder(preservedExistingBlocks, candidateBlocks);
   const requiredPatternChecks = createPatternChecks(
-    normalizedCandidate,
+    candidateDocument,
     validationContract.required_patterns ?? [],
     true,
   );
   const forbiddenPatternChecks = createPatternChecks(
-    normalizedCandidate,
+    candidateDocument,
     validationContract.forbidden_patterns ?? [],
     false,
   );
@@ -1194,38 +1589,45 @@ function validateSpecDocument(candidateDocument, templateText) {
   ];
 }
 
-function validateSpecUpdateDocument(candidateDocument, existingSpecText) {
-  const existingLines = extractNonEmptyNormalizedLines(existingSpecText);
-  const candidateLines = extractNonEmptyNormalizedLines(candidateDocument);
-  const preservesExistingContent = linesAppearInOrder(existingLines, candidateLines);
-  const hasOffsetStoreComponent = /^\s*4\.\s+`Offset Store`/m.test(candidateDocument);
-  const hasCrossRegionNonGoal =
-    /(^|\n)-\s+(Cross-region log replication\.|Replicating logs across regions\.)/mi.test(
-      candidateDocument,
-    );
+function validateSpecUpdateDocument(candidateDocument, existingSpecText, validationContract) {
+  const filteredExistingSpecText = removeReplaceableSectionContent(
+    existingSpecText,
+    validationContract.replaceable_sections ?? [],
+  );
+  const existingBlocks = extractNormalizedMarkdownBlocks(filteredExistingSpecText);
+  const candidateBlocks = extractNormalizedMarkdownBlocks(candidateDocument);
+  const preservedExistingBlocks = filterLinesByPatternSpecs(
+    existingBlocks,
+    validationContract.allowed_removed_patterns ?? [],
+  );
+  const preservesExistingContent = linesAppearInOrder(preservedExistingBlocks, candidateBlocks);
+  const requiredPatternChecks = createPatternChecks(
+    candidateDocument,
+    validationContract.required_patterns ?? [],
+    true,
+  );
+  const forbiddenPatternChecks = createPatternChecks(
+    candidateDocument,
+    validationContract.forbidden_patterns ?? [],
+    false,
+  );
+  const preservedSectionChecks = createPreservedSectionChecks(
+    existingSpecText,
+    candidateDocument,
+    validationContract.preserve_sections ?? [],
+  );
 
   return [
     createCheck(
       "existing_content_preserved_in_order",
       preservesExistingContent,
       preservesExistingContent
-        ? "All non-empty lines from the existing spec appear in order in the candidate."
-        : "One or more non-empty lines from the existing spec were removed or reordered.",
+        ? "All existing markdown blocks appear in order in the candidate, except blocks explicitly marked as replaceable."
+        : "One or more existing markdown blocks were removed or reordered outside the explicitly replaceable blocks.",
     ),
-    createCheck(
-      "offset_store_component_present",
-      hasOffsetStoreComponent,
-      hasOffsetStoreComponent
-        ? "Detected numbered component `4. `Offset Store``."
-        : "Did not detect numbered component `4. `Offset Store``.",
-    ),
-    createCheck(
-      "cross_region_nongoal_present",
-      hasCrossRegionNonGoal,
-      hasCrossRegionNonGoal
-        ? "Detected the requested cross-region replication non-goal."
-        : "Did not detect the requested cross-region replication non-goal.",
-    ),
+    ...requiredPatternChecks,
+    ...forbiddenPatternChecks,
+    ...preservedSectionChecks,
     createCheck(
       "no_first_or_second_person",
       !hasPronounDrift(candidateDocument),
@@ -1289,7 +1691,7 @@ async function runDeterministicChecks(skillRoot, validationContract, candidateDo
       checks = validateSpecDocument(candidateDocument, templateText, languageText);
       break;
     case "spec-update-v1":
-      checks = validateSpecUpdateDocument(candidateDocument, existingSpecText, languageText);
+      checks = validateSpecUpdateDocument(candidateDocument, existingSpecText, validationContract);
       break;
     default:
       fail(`Unknown validation contract '${validationContract.validator}'.`);
@@ -1309,6 +1711,7 @@ async function runSingleTrial({
   candidateGenerated,
   judgeGenerated,
   runner,
+  skillName,
   skillRoot,
   validationContract,
 }) {
@@ -1338,8 +1741,15 @@ async function runSingleTrial({
   const startedAt = Date.now();
 
   const compileStartedAt = Date.now();
-  const brief = await candidateClient[compileFnName](packet);
+  const compiledBrief = await candidateClient[compileFnName](packet);
   timing.compile_ms = Date.now() - compileStartedAt;
+
+  const { brief, normalization } = normalizeCompiledBriefForRender({
+    skillName,
+    packetType: runner.packet_type,
+    brief: compiledBrief,
+    packet,
+  });
 
   if (runner.packet_type === "SpecEvalPacket") {
     brief.update_request = packet.task_prompt;
@@ -1384,6 +1794,7 @@ async function runSingleTrial({
     candidateDocument,
     report,
     deterministic_checks,
+    normalization,
     timing,
     summary: {
       llm_status: report.overall_status,
@@ -1415,6 +1826,7 @@ async function runVariantTrials({
       candidateGenerated,
       judgeGenerated,
       runner,
+      skillName,
       skillRoot,
       validationContract,
     });
@@ -1426,6 +1838,7 @@ async function runVariantTrials({
       "candidate.md": trialResult.candidateDocument,
       "report.json": trialResult.report,
       "deterministic_checks.json": trialResult.deterministic_checks,
+      "normalization.json": trialResult.normalization,
       "timing.json": trialResult.timing,
       "summary.json": trialResult.summary,
     };
@@ -1499,6 +1912,16 @@ function buildBenchmark(skillName, evalName, trials) {
       combined_worst_status: worstStatus(combinedStatuses),
       deterministic_pass_rate: Number((deterministicPassCount / trials.length).toFixed(2)),
     },
+    trial_summaries: trials.map((trial, index) => ({
+      trial: index + 1,
+      llm_status: trial.report.overall_status,
+      combined_status: trial.summary.combined_status,
+      deterministic_pass: trial.deterministic_checks.overall_pass,
+      failed_deterministic_checks: trial.deterministic_checks.checks
+        .filter((check) => !check.passed)
+        .map((check) => check.id),
+      timing_ms: trial.timing.total_ms,
+    })),
     timing_ms: {
       compile: summarizeNumeric(trials.map((trial) => trial.timing.compile_ms)),
       render: summarizeNumeric(trials.map((trial) => trial.timing.render_ms)),
