@@ -255,7 +255,10 @@ export function validateFoundationUpdateDocument(
   validationContract,
   packet,
 ) {
-  const baseChecks = validateFoundationDocument(candidateDocument, templateText, "", packet);
+  const skippedBaseCheckIds = new Set(validationContract.skip_base_check_ids ?? []);
+  const baseChecks = validateFoundationDocument(candidateDocument, templateText, "", packet).filter(
+    (check) => !skippedBaseCheckIds.has(check.id),
+  );
   const filteredExistingFoundationText = removeReplaceableSectionContent(
     existingFoundationText,
     validationContract.replaceable_sections ?? [],

@@ -195,6 +195,7 @@ async function checkValidationContract(contract, skillRoot, issues, scope) {
       issue(issues, scope, `'${field}' must be an array when present.`);
     }
   }
+  checkStringArray(contract.skip_base_check_ids, issues, scope, "skip_base_check_ids");
 }
 
 async function readBamlSourceFiles(directory, issues, scope) {

@@ -97,6 +97,11 @@ directory, or a suite directory:
 bun run eval:spec -- update-add-single-nongoal-preserve-system-overview --deterministic-only skills/spec-creator/evals/runs/<run>/candidate.md
 ```
 
+Update-mode validation contracts can use `skip_base_check_ids` when a packet
+explicitly asks to preserve legacy text that would fail a generic create-mode
+style rule. Keep these skips narrow and pair them with required/forbidden
+patterns for the actual requested edit.
+
 Current comparison variants:
 
 - `current` — working tree prompt stack
@@ -148,6 +153,30 @@ Use stable `capability_id` values in manifests instead of relying on mutable
 skill package names. Current values are `foundation-doc` and `service-spec`.
 Optional Braintrust environment variables are `BRAINTRUST_EXPERIMENT` for
 manual curated runs and `BRAINTRUST_ORG` for org selection.
+
+Braintrust can also be inspected from the terminal without opening the UI:
+
+```bash
+bun run braintrust:list -- --limit 5
+bun run braintrust:latest -- --capability foundation-doc
+bun run braintrust:latest -- --capability service-spec
+bun run braintrust:show -- foundation-doc.smoke.fast.model.20260423-1015.0a10e79
+```
+
+These commands use Braintrust's API and BTQL directly, summarize experiment
+rows, and print combined status counts, LLM status counts, deterministic
+failures, open issues, timing, and per-eval row status. They require
+`BRAINTRUST_API_KEY` and use `BRAINTRUST_PROJECT` when set.
+
+Braintrust also provides an optional beta `bt` CLI for listing experiments,
+running BTQL, and syncing experiment data locally:
+
+```bash
+curl -fsSL https://bt.dev/cli/install.sh | bash
+bt experiments list --project lightfast-skills --env-file .env --json --no-input
+bt sql "SELECT id, input, scores FROM experiment('<experiment-id>') LIMIT 20" --env-file .env --json --no-input
+bt sync pull experiment:<experiment-name> --project lightfast-skills --env-file .env
+```
 
 Eval manifests also carry lightweight taxonomy metadata
 (`scenario_type`, `input_shape`, `ambiguity_level`, `domain_profile`,
