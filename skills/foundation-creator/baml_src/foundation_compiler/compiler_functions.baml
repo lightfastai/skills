@@ -119,6 +119,8 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - State that the writer is a source-bound synthesizer, not a strategy consultant.
     - If the brief includes `existing_foundation`, treat the task as update mode and preserve the existing document verbatim except for the requested edits.
     - In update mode, tell the writer to copy every unchanged bullet and question verbatim instead of paraphrasing it.
+    - In update mode, tell the writer not to rewrite existing `Core Thesis` bullets unless the update request targets that exact bullet.
+    - In update mode, if an unchanged thesis bullet says artifacts `survive model churn better than prompts or transcripts`, keep that wording exactly; Strategic Bets restrictions do not apply to unchanged thesis bullets.
     - In update mode, tell the writer not to rewrite or replace existing open questions unless the update request explicitly targets that exact question.
     - In update mode, if the request asks for a new or replacement open question, preserve all other existing open-question bullets exactly and add or replace only the targeted question.
     - In update mode, tell the writer never to omit an existing open question unless the update request explicitly says to remove or replace that exact question.
@@ -151,6 +153,8 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Forbid market-leadership or superiority claims unless they are explicit in the brief.
     - In update mode, do not add new sections or broad new framing unless the request explicitly asks for them.
     - In update mode, if a boundary, actor, surface, strategic bet, or open question is not part of the requested edit, preserve its wording exactly.
+    - In update mode, if a `Core Thesis` bullet is not part of the requested edit, preserve its wording exactly.
+    - In update mode, do not apply `Strategic Bets` phrasing restrictions to unchanged `Core Thesis` bullets; for example, keep `survive model churn better than prompts or transcripts` unchanged when that thesis bullet is not targeted.
     - In update mode, do not rewrite an existing open question into a nearby broader or narrower variant just because it overlaps with the requested edit. Keep non-targeted questions byte-for-byte except for markdown context required by the edit.
     - In update mode, when adding or replacing an open question, keep the rest of the `Open Questions` list in its original order and wording.
     - In update mode, never omit an existing `Open Questions` bullet unless the request explicitly says to remove or replace that exact question.

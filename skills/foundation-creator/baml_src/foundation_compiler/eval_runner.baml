@@ -27,6 +27,8 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
       - extract a narrow `update_request` rather than rewriting the entire document
       - do not resolve existing ambiguity unless the task prompt explicitly asks for it
       - if a boundary, actor, surface, strategic bet, or open question is not explicitly targeted by the task prompt, keep its wording unchanged in the brief
+      - if a core thesis bullet is not explicitly targeted by the task prompt, keep its wording unchanged in the brief
+      - do not apply `strategic_bets` phrasing restrictions to unchanged core thesis bullets; if an unchanged thesis says artifacts `survive model churn better than prompts or transcripts`, keep that wording exactly
       - do not rewrite or replace an existing open question unless the task prompt explicitly targets that exact question
       - if the task prompt asks for a new or replacement open question, preserve all other existing open-question bullets exactly and add or replace only the targeted question
       - in `unresolved_questions`, copy every existing open-question bullet that is not explicitly replaced by the task prompt, in the original order
@@ -98,6 +100,8 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
     - If `existing_foundation` is present, treat this as update mode:
       - start from `existing_foundation`
       - preserve all unchanged lines verbatim
+      - preserve unchanged `Core Thesis` bullets exactly unless `update_request` targets that exact bullet
+      - do not apply `Strategic Bets` phrasing restrictions to unchanged `Core Thesis` bullets; for example, keep `survive model churn better than prompts or transcripts` unchanged when that thesis bullet is not targeted
       - preserve unchanged bullet wording and unchanged open questions exactly as written
       - do not rewrite or replace existing open questions unless `update_request` explicitly targets that exact question
       - when adding or replacing an open question, keep every other existing open-question bullet in its original order and wording
