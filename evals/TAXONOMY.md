@@ -1,0 +1,101 @@
+# Eval Taxonomy
+
+This repo tracks eval coverage across a small shared taxonomy so new packets
+expand the corpus intentionally instead of growing as one-off examples.
+
+## Manifest fields
+
+Each eval entry in `skills/*/evals/evals.json` should declare:
+
+- `scenario_type`
+- `input_shape`
+- `ambiguity_level`
+- `domain_profile`
+- `primary_risks`
+- optional `smoke: true` for the small representative CI subset
+
+Each manifest should also declare a stable top-level `capability_id` for
+cross-run reporting. Prefer capability names such as `foundation-doc` or
+`service-spec` over current package names that may be renamed later.
+
+These fields are lightweight metadata. They do not change execution, but they
+show up in `benchmark.json` so runs can be grouped by failure mode later.
+
+## Canonical scenario types
+
+- `clear_intent_prompt`
+  - Straightforward create-mode request with explicit scope and components.
+- `unstructured_notes_prompt`
+  - Messy notes, but still mostly service-shaped and not deeply ambiguous.
+- `source_packet_transition`
+  - Curated packet with real-world material that is internally mixed, evolving,
+    or timeline-sensitive.
+- `update_existing_doc`
+  - Existing document is the dominant constraint; success depends on precise
+    in-place edits without broad drift.
+- `update_existing_doc_from_source_packet`
+  - Existing document remains the dominant constraint, but a messy source packet
+    or addendum supplies the requested change.
+- `founder_notes_ambiguity`
+  - Highly ambiguous notes where positioning, boundaries, and unresolved
+    questions matter more than completeness.
+- `cross_domain_generalization`
+  - Non-default domain chosen to test whether the skill overfits to developer
+    infrastructure examples.
+
+## Supporting axes
+
+### `input_shape`
+
+- `direct_prompt`
+- `notes_prompt`
+- `source_packet`
+- `existing_doc_update`
+
+### `ambiguity_level`
+
+- `low`
+- `medium`
+- `high`
+
+### `domain_profile`
+
+- `developer_infrastructure`
+- `company_foundation`
+- `agent_work_infrastructure`
+- `care_operations`
+- `non_developer_domain`
+
+### `primary_risks`
+
+Use a short list of the dominant failure modes for the eval. Current common
+values:
+
+- `template_drift`
+- `boundary_drift`
+- `dependency_boundary_drift`
+- `foundation_language_drift`
+- `implementation_leakage`
+- `invented_capabilities`
+- `invented_certainty`
+- `micro_paraphrase_drift`
+- `section_rewrite_drift`
+- `scope_bleed`
+- `source_overfitting`
+- `weak_boundaries`
+- `update_regression`
+
+## Current expansion priority
+
+The comparison harness now supports:
+
+- `current` — working tree skill
+- `previous` — `HEAD~1` snapshot
+- `profile:no-skill` — intentionally under-scaffolded baseline
+
+The next missing slices are:
+
+- comparison coverage on more packets so prompt changes are judged by deltas,
+  not only by isolated pass/fail runs
+- richer cross-domain and update-mode packets once the runner/reporting shape
+  has stabilized

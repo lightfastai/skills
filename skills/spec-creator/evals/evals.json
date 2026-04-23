@@ -1,9 +1,31 @@
 {
   "skill_name": "spec-creator",
+  "capability_id": "service-spec",
+  "runner_contract": {
+    "type": "baml_pipeline",
+    "packet_type": "SpecEvalPacket",
+    "compile_brief_function": "CompileSpecBriefFromPacket",
+    "render_document_function": "RenderSpecDocumentDraft",
+    "evaluate_document_function": "EvaluateSpecDocument"
+  },
+  "validation_contract": {
+    "type": "reference_document_checks",
+    "validator": "spec-v1",
+    "template_file": "references/template.md",
+    "language_file": "references/language.md"
+  },
   "evals": [
     {
       "id": 0,
       "eval_name": "create-from-clear-intent",
+      "scenario_type": "clear_intent_prompt",
+      "input_shape": "direct_prompt",
+      "ambiguity_level": "low",
+      "domain_profile": "developer_infrastructure",
+      "primary_risks": [
+        "template_drift",
+        "implementation_leakage"
+      ],
       "prompt": "Can you write a SPEC.md for a service we're building called Glacier Tier Manager? It watches S3 buckets and moves old objects to Glacier Deep Archive after policy-defined age thresholds. Polling, not event-driven — we want deterministic cadence. Main components: a Bucket Poller that lists objects on a schedule, a Policy Evaluator that decides which objects are eligible, and a Tiering Executor that issues the storage-class change. External deps: S3 API and per-bucket lifecycle policy files. Not a general-purpose cost optimizer — it only does tiering.",
       "expected_output": "A SPEC.md at repo root covering Purpose, Problem Statement (with 3 bullets + 'Important boundary' block), Goals + Non-Goals (non-goal should reflect 'not a cost optimizer'), System Overview with the three named components, External Dependencies, and a Core Domain Model. Voice is third-person, fields use the `name` (type) format, obligation keywords are lowercase.",
       "files": []
@@ -11,6 +33,14 @@
     {
       "id": 1,
       "eval_name": "create-from-unstructured-notes",
+      "scenario_type": "unstructured_notes_prompt",
+      "input_shape": "notes_prompt",
+      "ambiguity_level": "medium",
+      "domain_profile": "developer_infrastructure",
+      "primary_risks": [
+        "template_drift",
+        "weak_boundaries"
+      ],
       "prompt": "I have rough notes on a service I want formalized into a SPEC.md. Here's what I have:\n\n- name: Hookshot. it's a webhook retry daemon.\n- retries failed outbound webhooks with exponential backoff\n- keeps state per endpoint (success rate, last attempt)\n- has a per-URL circuit breaker so one broken target doesn't starve others\n- retry schedules configurable per endpoint\n- NOT a general-purpose message queue. teams shouldn't push arbitrary jobs through it\n- reads webhook delivery records from a postgres table called webhook_deliveries\n- marks them delivered or dead-lettered\n\nTurn this into a proper spec.",
       "expected_output": "A SPEC.md that reorganizes the notes into the template structure: Purpose (one sentence about webhook retry), Problem Statement with bullets, 'Important boundary' + Non-Goals covering the 'not a queue' constraint, Main Components (retry scheduler, circuit breaker, state tracker or equivalent), External Dependencies (postgres), Domain Model with an entity for the delivery record. Notes-style phrasings are rewritten in spec voice.",
       "files": []
@@ -18,9 +48,913 @@
     {
       "id": 2,
       "eval_name": "update-add-nongoal-and-component",
+      "scenario_type": "update_existing_doc",
+      "input_shape": "existing_doc_update",
+      "ambiguity_level": "low",
+      "domain_profile": "developer_infrastructure",
+      "primary_risks": [
+        "update_regression",
+        "template_drift"
+      ],
       "prompt": "We have an existing SPEC.md at the repo root for Log Shipper. Please update it: add a non-goal stating that cross-region log replication is out of scope, and add a new main component called `Offset Store` that persists per-file read offsets. Keep everything else as-is.",
       "expected_output": "SPEC.md with the existing sections preserved verbatim except: (1) a new bullet added under Non-Goals covering cross-region replication, phrased as a gerund/noun phrase per the language guide; (2) a new numbered component `Offset Store` added under 3.1 with a verb-led description. Section numbering remains 1, 2, 3; component numbering extends to 4. No first-person pronouns introduced.",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/existing_spec.md",
+        "required_patterns": [
+          {
+            "id": "offset_store_component_present",
+            "pattern": "\\d+\\. `Offset Store`",
+            "section_title": "Main Components",
+            "details_pass": "Detected the requested numbered `Offset Store` component.",
+            "details_fail": "Did not detect the requested numbered `Offset Store` component."
+          },
+          {
+            "id": "cross_region_nongoal_present",
+            "pattern": "Cross-region log replication\\.|Replicating logs across regions\\.",
+            "section_title": "Non-Goals",
+            "details_pass": "Detected the requested cross-region replication non-goal.",
+            "details_fail": "Did not detect the requested cross-region replication non-goal."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "no_template_completion_abstraction_levels",
+            "pattern": "### 3\\.2 Abstraction Levels",
+            "details_pass": "No unrequested `Abstraction Levels` scaffold was added.",
+            "details_fail": "Detected an unrequested `Abstraction Levels` scaffold in a keep-everything-else-as-is update."
+          },
+          {
+            "id": "no_template_completion_external_dependencies",
+            "pattern": "### 3\\.3 External Dependencies",
+            "details_pass": "No unrequested `External Dependencies` scaffold was added.",
+            "details_fail": "Detected an unrequested `External Dependencies` scaffold in a keep-everything-else-as-is update."
+          },
+          {
+            "id": "no_template_completion_core_domain_model",
+            "pattern": "## 4\\. Core Domain Model",
+            "details_pass": "No unrequested `Core Domain Model` scaffold was added.",
+            "details_fail": "Detected an unrequested `Core Domain Model` scaffold in a keep-everything-else-as-is update."
+          }
+        ]
+      },
+      "packet_files": {
+        "existing_spec": "fixtures/existing_spec.md"
+      },
       "files": ["fixtures/existing_spec.md"]
+    },
+    {
+      "id": 3,
+      "eval_name": "create-from-vercel-mcp-source-packet",
+      "smoke": true,
+      "scenario_type": "source_packet_transition",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "developer_infrastructure",
+      "primary_risks": [
+        "invented_capabilities",
+        "invented_certainty",
+        "template_drift",
+        "implementation_leakage"
+      ],
+      "prompt": "Use the source packet in `fixtures/vercel_mcp/raw_notes.md` to write a `SPEC.md` for a service called `Vercel MCP`. Treat it as a long-running remote MCP service, not as a company-level foundation document. Preserve timeline-specific ambiguity where the source packet is in transition, and do not invent write capabilities that the notes do not justify.",
+      "expected_output": "A `SPEC.md` that frames `Vercel MCP` as an OAuth-protected remote MCP service for AI tools, includes a Problem Statement about secure structured access to Vercel docs, projects, deployments, and logs, sets clear goals and non-goals, identifies boundaries around approved clients and official endpoint usage, captures the current beta/read-only tension without pretending the service already has unconstrained write access, and stays behavioral rather than implementation-level.",
+      "expected_file": "fixtures/vercel_mcp/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/vercel_mcp/raw_notes.md",
+        "expected_criteria": "fixtures/vercel_mcp/expected_criteria.md"
+      },
+      "files": ["fixtures/vercel_mcp/raw_notes.md"]
+    },
+    {
+      "id": 4,
+      "eval_name": "create-from-lightfast-founder-notes-packet",
+      "smoke": true,
+      "scenario_type": "founder_notes_ambiguity",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "agent_work_infrastructure",
+      "primary_risks": [
+        "foundation_language_drift",
+        "invented_capabilities",
+        "invented_certainty",
+        "implementation_leakage"
+      ],
+      "prompt": "Use the source packet in `fixtures/lightfast_founder_notes/raw_notes.md` to write a `SPEC.md` for a service called `Lightfast Workspace Coordinator`. Treat it as a concrete repo-native coordination service, not as a company-level foundation document. Preserve unresolved product tension only where it materially affects service behavior, and do not invent hidden workflow engines, background mutation, or autonomous execution powers.",
+      "expected_output": "A `SPEC.md` that frames `Lightfast Workspace Coordinator` as a long-running service that turns rough workspace requests into packetized artifact drafts, evaluation runs, and explicit review decisions; sets clear boundaries around human review, silent mutation, and downstream execution; preserves open questions about repo-native versus hosted operation and failed-eval follow-up ownership; and stays behavioral rather than strategic or implementation-specific.",
+      "expected_file": "fixtures/lightfast_founder_notes/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/lightfast_founder_notes/raw_notes.md",
+        "expected_criteria": "fixtures/lightfast_founder_notes/expected_criteria.md"
+      },
+      "files": ["fixtures/lightfast_founder_notes/raw_notes.md"]
+    },
+    {
+      "id": 5,
+      "eval_name": "create-from-harbor-care-coordination-packet",
+      "smoke": true,
+      "scenario_type": "cross_domain_generalization",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "care_operations",
+      "primary_risks": [
+        "source_overfitting",
+        "invented_capabilities",
+        "invented_certainty",
+        "implementation_leakage"
+      ],
+      "prompt": "Use the source packet in `fixtures/harbor_care_coordination/raw_notes.md` to write a `SPEC.md` for a service called `Harbor Care Coordination Service`. Treat it as a trust-heavy care-coordination service, not as a developer tool, company foundation document, or clinical decision system. Preserve uncertainty where the packet leaves the automation boundary unresolved, and do not invent medical authority, compliance machinery, or detailed healthcare schemas.",
+      "expected_output": "A `SPEC.md` that frames `Harbor Care Coordination Service` as a long-running care-coordination service for turning messy referrals, intake notes, and follow-up events into a shared case timeline, explicit task ownership, and handoff tracking; keeps human advocates central; sets clear non-goals around clinical guidance, telehealth, EHR, insurer claims, and marketplace behavior; and remains behavioral rather than implementation-heavy.",
+      "expected_file": "fixtures/harbor_care_coordination/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/harbor_care_coordination/raw_notes.md",
+        "expected_criteria": "fixtures/harbor_care_coordination/expected_criteria.md"
+      },
+      "files": ["fixtures/harbor_care_coordination/raw_notes.md"]
+    },
+    {
+      "id": 6,
+      "eval_name": "update-harbor-add-advocate-escalation-and-open-questions",
+      "scenario_type": "update_existing_doc_from_source_packet",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "care_operations",
+      "primary_risks": [
+        "update_regression",
+        "invented_capabilities",
+        "invented_certainty",
+        "template_drift"
+      ],
+      "prompt": "Update the existing `SPEC.md` using the addendum in `fixtures/harbor_update_addendum/raw_notes.md`. Keep the existing structure and wording unless the notes require a change. Append a new main component called `Advocate Escalation Queue` at the end of `### 3.1 Main Components`, preserve the current care-coordination scope, and add explicit open questions for automation-versus-advocate follow-up ownership, access model, and whether reminders belong here or in a separate communication service. Do not turn reminders into a resolved standalone capability, do not reshuffle existing component numbering, and do not invent clinical, claims, or implementation detail.",
+      "expected_output": "An updated `SPEC.md` that preserves the current Harbor draft while adding an explicit advocate-escalation surface and carrying forward the unresolved automation, access, and reminder questions without rewriting the document from scratch.",
+      "expected_file": "fixtures/harbor_update_addendum/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/harbor_update_addendum/existing_spec.md",
+        "allowed_removed_patterns": [
+          {
+            "pattern": "^Purpose: A long-running care-coordination service that turns referrals, intake notes, discharge instructions, documents, and follow-up events into a shared case timeline, coordination task queue, handoff tracker, and cautious benefits-question surface across family caregivers, patients, advocates, providers, pharmacies, and payers\\.$"
+          },
+          {
+            "pattern": "^- Human advocates remain central when situations are ambiguous, sensitive, or clinically interpretive\\.$"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "advocate_escalation_queue_component_present",
+            "pattern": "6\\. `Advocate Escalation Queue`",
+            "section_title": "Main Components",
+            "details_pass": "Detected the requested appended `Advocate Escalation Queue` component as item 6.",
+            "details_fail": "Did not detect the requested appended `Advocate Escalation Queue` component as item 6."
+          },
+          {
+            "id": "open_questions_section_present",
+            "pattern": "## 5\\. Open Questions",
+            "details_pass": "Detected an `Open Questions` section for the update addendum.",
+            "details_fail": "Did not detect the required `Open Questions` section."
+          },
+          {
+            "id": "automation_vs_advocate_question_present",
+            "pattern": "automated versus advocate-owned|automated vs advocate-owned|advocate-owned|owned by a human advocate",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the automation-versus-advocate follow-up question.",
+            "details_fail": "Did not detect language preserving the automation-versus-advocate follow-up question."
+          },
+          {
+            "id": "reminder_boundary_question_present",
+            "pattern": "separate communication service|reminders belong here",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the reminder-service boundary as an open question.",
+            "details_fail": "Did not detect language preserving the reminder-service boundary as an open question."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "no_standalone_reminder_component",
+            "pattern": "\\d+\\. `(?:Reminder|Reminders|Missing-document and callback follow-up|Communication Service)`",
+            "section_title": "Main Components",
+            "details_pass": "No standalone reminder or communication component was added.",
+            "details_fail": "Detected a standalone reminder or communication component even though the reminder boundary is still unresolved."
+          }
+        ]
+      },
+      "packet_files": {
+        "raw_notes": "fixtures/harbor_update_addendum/raw_notes.md",
+        "expected_criteria": "fixtures/harbor_update_addendum/expected_criteria.md",
+        "existing_spec": "fixtures/harbor_update_addendum/existing_spec.md"
+      },
+      "files": [
+        "fixtures/harbor_update_addendum/raw_notes.md",
+        "fixtures/harbor_update_addendum/existing_spec.md"
+      ]
+    },
+    {
+      "id": 7,
+      "eval_name": "update-lightfast-add-approved-output-handoff-and-open-questions",
+      "scenario_type": "update_existing_doc_from_source_packet",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "agent_work_infrastructure",
+      "primary_risks": [
+        "update_regression",
+        "foundation_language_drift",
+        "invented_capabilities",
+        "template_drift"
+      ],
+      "prompt": "Update the existing `SPEC.md` using the addendum in `fixtures/lightfast_update_addendum/raw_notes.md`. Keep the existing structure and wording unless the notes require a change. Append a new main component called `Approved Output Handoff` at the end of `### 3.1 Main Components`, preserve the current repo/workspace coordination scope, and add explicit open questions for downstream acknowledgement ownership, stale-approval handling after artifact changes, and whether rejected drafts ever produce a handoff object. Do not turn the service into a deployment executor, workflow runtime, docs CMS, or hosted control plane. Do not reshuffle existing component numbering or rewrite unchanged sections.",
+      "expected_output": "An updated `SPEC.md` that preserves the current Lightfast draft while adding an explicit approved-output handoff surface and carrying forward the unresolved acknowledgement, stale-approval, and rejected-draft questions without drifting into foundation-doc language or downstream execution behavior.",
+      "expected_file": "fixtures/lightfast_update_addendum/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/lightfast_update_addendum/existing_spec.md",
+        "replaceable_sections": [
+          {
+            "title": "Open Questions"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "approved_output_handoff_component_present",
+            "pattern": "6\\. `Approved Output Handoff`",
+            "section_title": "Main Components",
+            "details_pass": "Detected the requested appended `Approved Output Handoff` component as item 6.",
+            "details_fail": "Did not detect the requested appended `Approved Output Handoff` component as item 6."
+          },
+          {
+            "id": "downstream_acknowledgement_question_present",
+            "pattern": "acknowledg(?:e|ement|ment)|receipt",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the downstream acknowledgement or receipt question.",
+            "details_fail": "Did not detect language preserving the downstream acknowledgement or receipt question."
+          },
+          {
+            "id": "stale_approval_question_present",
+            "pattern": "stale|invalidate|invalidated|require a new review",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the stale-approval or re-review question.",
+            "details_fail": "Did not detect language preserving the stale-approval or re-review question."
+          },
+          {
+            "id": "rejected_draft_handoff_question_present",
+            "pattern": "rejected drafts ever produce a handoff object|rejected drafts|strictly for approved outputs",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the rejected-draft handoff boundary question.",
+            "details_fail": "Did not detect language preserving the rejected-draft handoff boundary question."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "no_execution_component_added",
+            "pattern": "\\d+\\. `(?:Deployment Executor|Downstream Executor|Workflow Runtime|Hosted Control Plane)`",
+            "section_title": "Main Components",
+            "details_pass": "No execution or hosted-control-plane component was added.",
+            "details_fail": "Detected an execution or hosted-control-plane component that was not requested."
+          },
+          {
+            "id": "no_foundation_language_drift",
+            "pattern": "What This Is|Strategic Bets|Durable Surfaces|durable artifact layer|operating system",
+            "details_pass": "No foundation-document language drift was detected.",
+            "details_fail": "Detected foundation-document language drift in the updated spec."
+          },
+          {
+            "id": "no_resolved_acknowledgement_capability",
+            "pattern": "(?:make|keep|show|expose)\\s+(?:any\\s+)?downstream\\s+acknowledg(?:e|ement|ment)(?:\\s+of\\s+receipt)?\\s+(?:state\\s+)?visible",
+            "section_title": "Open Questions",
+            "details_pass": "Downstream acknowledgement was not presented as a current guaranteed capability.",
+            "details_fail": "The spec presented downstream acknowledgement visibility as a current capability instead of keeping it unresolved."
+          }
+        ],
+        "preserve_sections": [
+          {
+            "id": "core_domain_model_unchanged",
+            "title": "Core Domain Model",
+            "details_pass": "The existing `Core Domain Model` section remained unchanged, which matches the narrow update request.",
+            "details_fail": "The `Core Domain Model` section changed even though the update request did not ask for domain-model edits."
+          }
+        ]
+      },
+      "packet_files": {
+        "raw_notes": "fixtures/lightfast_update_addendum/raw_notes.md",
+        "expected_criteria": "fixtures/lightfast_update_addendum/expected_criteria.md",
+        "existing_spec": "fixtures/lightfast_update_addendum/existing_spec.md"
+      },
+      "files": [
+        "fixtures/lightfast_update_addendum/raw_notes.md",
+        "fixtures/lightfast_update_addendum/existing_spec.md"
+      ]
+    },
+    {
+      "id": 8,
+      "eval_name": "update-add-single-nongoal-preserve-system-overview",
+      "smoke": true,
+      "scenario_type": "update_existing_doc",
+      "input_shape": "existing_doc_update",
+      "ambiguity_level": "low",
+      "domain_profile": "developer_infrastructure",
+      "primary_risks": [
+        "update_regression",
+        "micro_paraphrase_drift",
+        "template_drift"
+      ],
+      "prompt": "We have an existing SPEC.md at the repo root for Log Shipper. Please update it: add a non-goal stating that cross-region log replication is out of scope. Keep everything else as-is. Do not rewrite `## 3. System Overview` or any existing component descriptions.",
+      "expected_output": "SPEC.md with the existing document preserved verbatim except for one new non-goal bullet under `### 2.2 Non-Goals`. `## 3. System Overview` should remain unchanged, including the existing `Forwarder` wording `Batches events and posts to the sink.` No first-person pronouns introduced.",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/existing_spec.md",
+        "required_patterns": [
+          {
+            "id": "cross_region_nongoal_present",
+            "pattern": "Cross-region log replication(?: is out of scope)?\\.|Cross-region log replication\\. \\(Out of scope\\.\\)|Replicating logs across regions\\.",
+            "section_title": "Non-Goals",
+            "details_pass": "Detected the requested cross-region replication non-goal.",
+            "details_fail": "Did not detect the requested cross-region replication non-goal."
+          },
+          {
+            "id": "forwarder_line_preserved_exactly",
+            "pattern": "- Batches events and posts to the sink\\.",
+            "section_title": "System Overview",
+            "details_pass": "The unchanged `Forwarder` description remained exactly preserved.",
+            "details_fail": "The unchanged `Forwarder` description was paraphrased or rewritten."
+          }
+        ],
+        "preserve_sections": [
+          {
+            "id": "problem_statement_unchanged",
+            "title": "Problem Statement",
+            "details_pass": "The existing `Problem Statement` section remained unchanged, which matches the narrow update request.",
+            "details_fail": "The `Problem Statement` section changed even though the update request did not ask for edits there."
+          },
+          {
+            "id": "system_overview_unchanged",
+            "title": "System Overview",
+            "details_pass": "The existing `System Overview` section remained unchanged, which matches the narrow update request.",
+            "details_fail": "The `System Overview` section changed even though the update request did not ask for edits there."
+          }
+        ]
+      },
+      "packet_files": {
+        "existing_spec": "fixtures/existing_spec.md"
+      },
+      "files": ["fixtures/existing_spec.md"]
+    },
+    {
+      "id": 9,
+      "eval_name": "update-lightfast-refresh-open-questions-section",
+      "scenario_type": "update_existing_doc_from_source_packet",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "agent_work_infrastructure",
+      "primary_risks": [
+        "update_regression",
+        "section_rewrite_drift",
+        "invented_capabilities",
+        "template_drift"
+      ],
+      "prompt": "Update the existing `SPEC.md` using the addendum in `fixtures/lightfast_open_questions_refresh/raw_notes.md`. The existing document already contains the `Approved Output Handoff` component. Refresh `## 5. Open Questions` so it reflects the current approval-to-handoff ambiguity, but keep the rest of the draft unchanged. Do not rewrite `Problem Statement`, `Goals and Non-Goals`, `System Overview`, or `Core Domain Model`. Do not turn the service into a workflow runtime, deployment executor, release manager, hosted control plane, or queue system.",
+      "expected_output": "An updated `SPEC.md` that behaves like a section refresh, preserving the existing Lightfast service framing and `Approved Output Handoff` component while replacing the old open questions with newer uncertainty around acknowledgement ownership, stale approved handoffs, and whether rejected drafts ever produce a handoff object.",
+      "expected_file": "fixtures/lightfast_open_questions_refresh/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/lightfast_open_questions_refresh/existing_spec.md",
+        "replaceable_sections": [
+          {
+            "title": "Open Questions"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "open_questions_section_present",
+            "pattern": "## 5\\. Open Questions",
+            "details_pass": "Detected the refreshed `Open Questions` section.",
+            "details_fail": "Did not detect the required `Open Questions` section."
+          },
+          {
+            "id": "downstream_acknowledgement_question_present",
+            "pattern": "acknowledg(?:e|ement|ment)|receipt|acceptance",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the downstream acknowledgement or receipt ownership question.",
+            "details_fail": "Did not detect language preserving the downstream acknowledgement or receipt ownership question."
+          },
+          {
+            "id": "stale_handoff_question_present",
+            "pattern": "stale|historical record|require another approval|new handoff",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the stale or superseded handoff question.",
+            "details_fail": "Did not detect language preserving the stale or superseded handoff question."
+          },
+          {
+            "id": "rejected_draft_handoff_question_present",
+            "pattern": "rejected drafts ever produce a handoff object|approval-only|strictly approval-only|strictly for approved outputs",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the rejected-draft handoff question.",
+            "details_fail": "Did not detect language preserving the rejected-draft handoff question."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "old_hosted_vs_repo_question_removed",
+            "pattern": "repo-native and workspace-local first|hosted catalog|multi-workspace control plane later",
+            "section_title": "Open Questions",
+            "details_pass": "The older hosted-versus-repo-native question was removed.",
+            "details_fail": "Detected the older hosted-versus-repo-native question even though this section should have been refreshed."
+          },
+          {
+            "id": "old_eval_followup_question_removed",
+            "pattern": "When an evaluation fails, should the service create follow-up tasks itself",
+            "section_title": "Open Questions",
+            "details_pass": "The older evaluation-follow-up ownership question was removed.",
+            "details_fail": "Detected the older evaluation-follow-up ownership question even though this section should have been refreshed."
+          },
+          {
+            "id": "old_value_lands_first_question_removed",
+            "pattern": "How much of the service's value should land first in drafting, evaluation, or review gates",
+            "section_title": "Open Questions",
+            "details_pass": "The older 'where value lands first' question was removed.",
+            "details_fail": "Detected the older 'where value lands first' question even though this section should have been refreshed."
+          },
+          {
+            "id": "no_execution_language_drift",
+            "pattern": "deployment executor|release manager|hosted control plane|queue system",
+            "section_title": "Open Questions",
+            "details_pass": "No execution or hosted-control-plane drift was introduced.",
+            "details_fail": "Detected execution or hosted-control-plane drift in a section-refresh update."
+          },
+          {
+            "id": "no_resolved_acknowledgement_capability",
+            "pattern": "(?:make|keep|show|expose)\\s+(?:any\\s+)?downstream\\s+acknowledg(?:e|ement|ment)(?:\\s+of\\s+receipt|\\s+or\\s+acceptance)?\\s+(?:state\\s+)?visible",
+            "section_title": "Open Questions",
+            "details_pass": "Downstream acknowledgement was not presented as a current guaranteed capability.",
+            "details_fail": "The spec presented downstream acknowledgement as a current guaranteed capability instead of keeping it unresolved."
+          }
+        ],
+        "preserve_sections": [
+          {
+            "id": "problem_statement_unchanged",
+            "title": "Problem Statement",
+            "details_pass": "The existing `Problem Statement` section remained unchanged, which matches this narrow section-refresh request.",
+            "details_fail": "The `Problem Statement` section changed even though the packet only asked to refresh `Open Questions`."
+          },
+          {
+            "id": "goals_and_non_goals_unchanged",
+            "title": "Goals and Non-Goals",
+            "details_pass": "The existing `Goals and Non-Goals` section remained unchanged, which matches this narrow section-refresh request.",
+            "details_fail": "The `Goals and Non-Goals` section changed even though the packet only asked to refresh `Open Questions`."
+          },
+          {
+            "id": "system_overview_unchanged",
+            "title": "System Overview",
+            "details_pass": "The existing `System Overview` section remained unchanged, including the current `Approved Output Handoff` component wording.",
+            "details_fail": "The `System Overview` section changed even though the packet only asked to refresh `Open Questions`."
+          },
+          {
+            "id": "core_domain_model_unchanged",
+            "title": "Core Domain Model",
+            "details_pass": "The existing `Core Domain Model` section remained unchanged, which matches the narrow update request.",
+            "details_fail": "The `Core Domain Model` section changed even though the packet did not ask for domain-model edits."
+          }
+        ]
+      },
+      "packet_files": {
+        "raw_notes": "fixtures/lightfast_open_questions_refresh/raw_notes.md",
+        "expected_criteria": "fixtures/lightfast_open_questions_refresh/expected_criteria.md",
+        "existing_spec": "fixtures/lightfast_open_questions_refresh/existing_spec.md"
+      },
+      "files": [
+        "fixtures/lightfast_open_questions_refresh/raw_notes.md",
+        "fixtures/lightfast_open_questions_refresh/existing_spec.md"
+      ]
+    },
+    {
+      "id": 10,
+      "eval_name": "update-harbor-refresh-open-questions-section",
+      "scenario_type": "update_existing_doc_from_source_packet",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "care_operations",
+      "primary_risks": [
+        "update_regression",
+        "section_rewrite_drift",
+        "invented_capabilities",
+        "template_drift"
+      ],
+      "prompt": "Update the existing `SPEC.md` using the addendum in `fixtures/harbor_open_questions_refresh/raw_notes.md`. The existing document already contains the `Advocate Escalation Queue` component. Refresh `## 5. Open Questions` so it reflects the current household-access, external-resolution, and after-hours boundary ambiguity, but keep the rest of the draft unchanged. Do not rewrite `Problem Statement`, `Goals and Non-Goals`, `System Overview`, or `Core Domain Model`. Do not turn the service into a caregiver portal, permissions engine, telehealth system, clinical triage layer, EHR, or claims processor.",
+      "expected_output": "An updated `SPEC.md` that behaves like a section refresh, preserving the existing Harbor service framing and `Advocate Escalation Queue` component while replacing the old open questions with newer uncertainty around household access authority, external-resolution tracking after escalation, and whether after-hours non-clinical issues belong in Harbor or a separate urgent-support path.",
+      "expected_file": "fixtures/harbor_open_questions_refresh/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/harbor_open_questions_refresh/existing_spec.md",
+        "replaceable_sections": [
+          {
+            "title": "Open Questions"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "open_questions_section_present",
+            "pattern": "## 5\\. Open Questions",
+            "details_pass": "Detected the refreshed `Open Questions` section.",
+            "details_fail": "Did not detect the required `Open Questions` section."
+          },
+          {
+            "id": "household_access_question_present",
+            "pattern": "view or update.*(?:shared )?case|patient-designated caregivers|authorized (?:family )?caregivers|sponsored navigator",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the household-access authority question.",
+            "details_fail": "Did not detect language preserving the household-access authority question."
+          },
+          {
+            "id": "external_resolution_question_present",
+            "pattern": "external resolution|only the handoff|next internal follow-up|payer|provider office|pharmacy",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the external-resolution tracking question.",
+            "details_fail": "Did not detect language preserving the external-resolution tracking question."
+          },
+          {
+            "id": "after_hours_boundary_question_present",
+            "pattern": "after hours|after-hours|next advocate review|urgent-support|urgent support",
+            "section_title": "Open Questions",
+            "details_pass": "Detected language preserving the after-hours boundary question.",
+            "details_fail": "Did not detect language preserving the after-hours boundary question."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "old_automation_vs_advocate_question_removed",
+            "pattern": "How much outbound follow-up can be automated versus advocate-owned",
+            "section_title": "Open Questions",
+            "details_pass": "The older automation-versus-advocate question was removed.",
+            "details_fail": "Detected the older automation-versus-advocate question even though this section should have been refreshed."
+          },
+          {
+            "id": "old_access_model_question_removed",
+            "pattern": "primary access model family direct|employer/payer sponsored|provider-linked",
+            "section_title": "Open Questions",
+            "details_pass": "The older access-model question was removed.",
+            "details_fail": "Detected the older access-model question even though this section should have been refreshed."
+          },
+          {
+            "id": "old_reminder_boundary_question_removed",
+            "pattern": "Do reminders belong here or in a separate communication service",
+            "section_title": "Open Questions",
+            "details_pass": "The older reminder-service boundary question was removed.",
+            "details_fail": "Detected the older reminder-service boundary question even though this section should have been refreshed."
+          },
+          {
+            "id": "no_portal_or_permissions_engine_capability",
+            "pattern": "caregiver portal|family portal|consent engine|permissions engine",
+            "section_title": "Open Questions",
+            "details_pass": "The refreshed questions did not invent a portal or permissions engine capability.",
+            "details_fail": "The refreshed questions invented a portal or permissions engine capability instead of keeping access authority unresolved."
+          },
+          {
+            "id": "no_clinical_after_hours_capability",
+            "pattern": "telehealth|clinical triage|on-call clinical support",
+            "section_title": "Open Questions",
+            "details_pass": "The refreshed questions did not invent after-hours clinical support behavior.",
+            "details_fail": "The refreshed questions drifted into telehealth or clinical triage behavior."
+          }
+        ],
+        "preserve_sections": [
+          {
+            "id": "problem_statement_unchanged",
+            "title": "Problem Statement",
+            "details_pass": "The existing `Problem Statement` section remained unchanged, which matches this narrow section-refresh request.",
+            "details_fail": "The `Problem Statement` section changed even though the packet only asked to refresh `Open Questions`."
+          },
+          {
+            "id": "goals_and_non_goals_unchanged",
+            "title": "Goals and Non-Goals",
+            "details_pass": "The existing `Goals and Non-Goals` section remained unchanged, which matches this narrow section-refresh request.",
+            "details_fail": "The `Goals and Non-Goals` section changed even though the packet only asked to refresh `Open Questions`."
+          },
+          {
+            "id": "system_overview_unchanged",
+            "title": "System Overview",
+            "details_pass": "The existing `System Overview` section remained unchanged, including the current `Advocate Escalation Queue` component wording.",
+            "details_fail": "The `System Overview` section changed even though the packet only asked to refresh `Open Questions`."
+          },
+          {
+            "id": "core_domain_model_unchanged",
+            "title": "Core Domain Model",
+            "details_pass": "The existing `Core Domain Model` section remained unchanged, which matches the narrow update request.",
+            "details_fail": "The `Core Domain Model` section changed even though the packet did not ask for domain-model edits."
+          }
+        ]
+      },
+      "packet_files": {
+        "raw_notes": "fixtures/harbor_open_questions_refresh/raw_notes.md",
+        "expected_criteria": "fixtures/harbor_open_questions_refresh/expected_criteria.md",
+        "existing_spec": "fixtures/harbor_open_questions_refresh/existing_spec.md"
+      },
+      "files": [
+        "fixtures/harbor_open_questions_refresh/raw_notes.md",
+        "fixtures/harbor_open_questions_refresh/existing_spec.md"
+      ]
+    },
+    {
+      "id": 11,
+      "eval_name": "update-lightfast-refresh-non-goals-section",
+      "scenario_type": "update_existing_doc_from_source_packet",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "agent_work_infrastructure",
+      "primary_risks": [
+        "update_regression",
+        "section_rewrite_drift",
+        "boundary_drift",
+        "invented_capabilities",
+        "template_drift"
+      ],
+      "prompt": "Update the existing `SPEC.md` using the addendum in `fixtures/lightfast_non_goals_refresh/raw_notes.md`. Refresh only `### 2.2 Non-Goals` so it reflects the newer scope boundaries, but keep `Purpose`, `Problem Statement`, `### 2.1 Goals`, `System Overview`, `Core Domain Model`, and `Open Questions` unchanged. Do not turn the service into project management, backlog grooming, a repo mutation engine, a CI runner, a deployment executor, a hosted multi-workspace control plane, or a docs platform.",
+      "expected_output": "An updated `SPEC.md` that behaves like a section refresh, preserving the existing Lightfast workspace-coordination framing while replacing the stale `Non-Goals` shorthand with sharper boundaries around ticket-routing and planning, repo mutation or execution, hosted multi-workspace control-plane behavior, docs-platform drift, and silent pass-chasing regeneration loops.",
+      "expected_file": "fixtures/lightfast_non_goals_refresh/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/lightfast_non_goals_refresh/existing_spec.md",
+        "replaceable_sections": [
+          {
+            "title": "Non-Goals"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "planning_boundary_present",
+            "pattern": "ticket routing|task assignment|sprint planning|backlog (?:grooming|management)",
+            "section_title": "Non-Goals",
+            "details_pass": "Detected a refreshed boundary against planning, routing, or task-management drift.",
+            "details_fail": "Did not detect a refreshed boundary against planning, routing, or task-management drift."
+          },
+          {
+            "id": "repo_execution_boundary_present",
+            "pattern": "repo(?:sitory)? mutation|mutating repositories|appl(?:y|ies|ying)(?: approved)? changes|apply changes(?: directly)? to (?:the )?repo|CI runner|runs? CI|running CI|deployment executor|deploys? work|deploying outputs|post-approval (?:execution )?surface|automatic(?:ally)? apply approved",
+            "section_title": "Non-Goals",
+            "details_pass": "Detected a refreshed boundary against repo mutation or execution behavior.",
+            "details_fail": "Did not detect a refreshed boundary against repo mutation or execution behavior."
+          },
+          {
+            "id": "hosted_control_plane_boundary_present",
+            "pattern": "hosted (?:(?:multi-workspace|multi-tenant)(?: or (?:multi-workspace|multi-tenant))?) control plane|cross-workspace (?:control plane|fleet manager)|multi-workspace fleet manager",
+            "section_title": "Non-Goals",
+            "details_pass": "Detected a refreshed boundary against hosted or cross-workspace control-plane drift.",
+            "details_fail": "Did not detect a refreshed boundary against hosted or cross-workspace control-plane drift."
+          },
+          {
+            "id": "docs_platform_boundary_present",
+            "pattern": "knowledge base|wiki|docs (?:publishing )?(?:platform|system)|content CMS|general content management",
+            "section_title": "Non-Goals",
+            "details_pass": "Detected a refreshed boundary against docs-platform or content-system drift.",
+            "details_fail": "Did not detect a refreshed boundary against docs-platform or content-system drift."
+          },
+          {
+            "id": "silent_regeneration_boundary_present",
+            "pattern": "silent (?:best-effort )?(?:rewrite|regeneration|drafting) loop|keep(?:s)? rewriting until (?:an )?eval(?:uation)? passes|pass-chasing regeneration|re-evaluating until something passes",
+            "section_title": "Non-Goals",
+            "details_pass": "Detected a refreshed boundary against silent pass-chasing regeneration.",
+            "details_fail": "Did not detect a refreshed boundary against silent pass-chasing regeneration."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "old_autonomous_engineer_bullet_removed",
+            "pattern": "Not a general autonomous software engineer\\.",
+            "section_title": "Non-Goals",
+            "details_pass": "The stale autonomous-engineer shorthand was removed instead of being carried forward verbatim.",
+            "details_fail": "Detected the stale autonomous-engineer shorthand even though this section should have been refreshed."
+          },
+          {
+            "id": "old_project_management_bullet_removed",
+            "pattern": "Not project management or backlog grooming\\.",
+            "section_title": "Non-Goals",
+            "details_pass": "The older project-management shorthand was removed instead of being preserved verbatim.",
+            "details_fail": "Detected the older project-management shorthand even though this section should have been refreshed."
+          },
+          {
+            "id": "old_docs_cms_bullet_removed",
+            "pattern": "Not a docs CMS\\.",
+            "section_title": "Non-Goals",
+            "details_pass": "The older docs-CMS shorthand was removed instead of being preserved verbatim.",
+            "details_fail": "Detected the older docs-CMS shorthand even though this section should have been refreshed."
+          },
+          {
+            "id": "no_foundation_language_drift",
+            "pattern": "company thesis|strategic moat|market positioning|foundational doctrine|product doctrine",
+            "section_title": "Non-Goals",
+            "details_pass": "No company-foundation language drift was introduced into the refreshed non-goals section.",
+            "details_fail": "Detected company-foundation language drift in the refreshed non-goals section."
+          }
+        ],
+        "preserve_sections": [
+          {
+            "id": "problem_statement_unchanged",
+            "title": "Problem Statement",
+            "details_pass": "The existing `Problem Statement` section remained unchanged, which matches this narrow section-refresh request.",
+            "details_fail": "The `Problem Statement` section changed even though the packet only asked to refresh `Non-Goals`."
+          },
+          {
+            "id": "goals_unchanged",
+            "title": "Goals",
+            "details_pass": "The existing `Goals` subsection remained unchanged, which matches this narrow section-refresh request.",
+            "details_fail": "The `Goals` subsection changed even though the packet only asked to refresh `Non-Goals`."
+          },
+          {
+            "id": "system_overview_unchanged",
+            "title": "System Overview",
+            "details_pass": "The existing `System Overview` section remained unchanged, including the current `Approved Output Handoff` component wording.",
+            "details_fail": "The `System Overview` section changed even though the packet only asked to refresh `Non-Goals`."
+          },
+          {
+            "id": "core_domain_model_unchanged",
+            "title": "Core Domain Model",
+            "details_pass": "The existing `Core Domain Model` section remained unchanged, which matches the narrow update request.",
+            "details_fail": "The `Core Domain Model` section changed even though the packet did not ask for domain-model edits."
+          },
+          {
+            "id": "open_questions_unchanged",
+            "title": "Open Questions",
+            "details_pass": "The existing `Open Questions` section remained unchanged, which matches this narrow section-refresh request.",
+            "details_fail": "The `Open Questions` section changed even though the packet only asked to refresh `Non-Goals`."
+          }
+        ]
+      },
+      "packet_files": {
+        "raw_notes": "fixtures/lightfast_non_goals_refresh/raw_notes.md",
+        "expected_criteria": "fixtures/lightfast_non_goals_refresh/expected_criteria.md",
+        "existing_spec": "fixtures/lightfast_non_goals_refresh/existing_spec.md"
+      },
+      "files": [
+        "fixtures/lightfast_non_goals_refresh/raw_notes.md",
+        "fixtures/lightfast_non_goals_refresh/existing_spec.md"
+      ]
+    },
+    {
+      "id": 12,
+      "eval_name": "update-harbor-refresh-external-dependencies-section",
+      "scenario_type": "update_existing_doc_from_source_packet",
+      "input_shape": "source_packet",
+      "ambiguity_level": "medium",
+      "domain_profile": "care_operations",
+      "primary_risks": [
+        "update_regression",
+        "section_rewrite_drift",
+        "dependency_boundary_drift",
+        "invented_capabilities",
+        "template_drift"
+      ],
+      "prompt": "Update the existing `SPEC.md` using the addendum in `fixtures/harbor_external_dependencies_refresh/raw_notes.md`. Refresh only `### 3.3 External Dependencies` so it frames Harbor dependencies as source material, communication channels, and qualified human review authority. Keep `Purpose`, `Problem Statement`, `Goals and Non-Goals`, `### 3.1 Main Components`, `### 3.2 Abstraction Levels`, `Core Domain Model`, and `Open Questions` unchanged. Do not turn participant roles into bare dependency bullets, and do not invent EHR integration, claims processing, telehealth, clinical triage, caregiver portals, consent-management, notification infrastructure, or implementation detail.",
+      "expected_output": "An updated `SPEC.md` that behaves like a subsection refresh, preserving the existing Harbor service framing while replacing the loose external-dependencies bullets with sharper dependency language for referral and intake sources, care-document sources, communication channels, and human advocate review.",
+      "expected_file": "fixtures/harbor_external_dependencies_refresh/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "spec-update-v1",
+        "language_file": "references/language.md",
+        "existing_spec_file": "evals/fixtures/harbor_external_dependencies_refresh/existing_spec.md",
+        "replaceable_sections": [
+          {
+            "title": "External Dependencies"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "external_dependencies_section_present",
+            "pattern": "### 3\\.3 External Dependencies",
+            "details_pass": "Detected the refreshed `External Dependencies` subsection.",
+            "details_fail": "Did not detect the required `External Dependencies` subsection."
+          },
+          {
+            "id": "referral_intake_sources_present",
+            "pattern": "referral and intake source(?:s| material)|intake sources.*referral forms|referral forms.*intake notes.*discharge (?:paperwork|instructions)",
+            "section_title": "External Dependencies",
+            "details_pass": "Detected referral and intake sources as a dependency.",
+            "details_fail": "Did not detect referral and intake sources as a dependency."
+          },
+          {
+            "id": "care_document_sources_present",
+            "pattern": "care-document sources|care document sources|document sources.*coordination context|care documents.*coordination context|document access.*coordination context|current coordination context",
+            "section_title": "External Dependencies",
+            "details_pass": "Detected care-document sources framed as coordination-context dependencies.",
+            "details_fail": "Did not detect care-document sources framed as coordination-context dependencies."
+          },
+          {
+            "id": "communication_channels_present",
+            "pattern": "communication channels.*provider offices.*pharmacies.*payers|provider offices.*pharmacies.*payers.*care contacts",
+            "section_title": "External Dependencies",
+            "details_pass": "Detected communication channels with provider offices, pharmacies, payers, and other care contacts.",
+            "details_fail": "Did not detect communication channels with provider offices, pharmacies, payers, and other care contacts."
+          },
+          {
+            "id": "human_advocate_review_present",
+            "pattern": "human advocate review|advocate review.*ambiguous.*sensitive|ambiguous.*sensitive.*clinically interpretive",
+            "section_title": "External Dependencies",
+            "details_pass": "Detected qualified human advocate review as a dependency boundary.",
+            "details_fail": "Did not detect qualified human advocate review as a dependency boundary."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "old_referral_channel_bullet_removed",
+            "pattern": "Referral and intake channels\\.",
+            "section_title": "External Dependencies",
+            "details_pass": "The older generic referral-channel bullet was removed.",
+            "details_fail": "Detected the older generic referral-channel bullet even though this subsection should have been refreshed."
+          },
+          {
+            "id": "old_care_documents_bullet_removed",
+            "pattern": "Care documents such as referral forms, intake notes, and discharge paperwork\\.",
+            "section_title": "External Dependencies",
+            "details_pass": "The older generic care-documents bullet was removed.",
+            "details_fail": "Detected the older generic care-documents bullet even though this subsection should have been refreshed."
+          },
+          {
+            "id": "old_communication_channels_bullet_removed",
+            "pattern": "Communication channels with provider offices, pharmacies, payers, and other care contacts\\.",
+            "section_title": "External Dependencies",
+            "details_pass": "The older generic communication-channels bullet was removed.",
+            "details_fail": "Detected the older generic communication-channels bullet even though this subsection should have been refreshed."
+          },
+          {
+            "id": "old_human_advocates_bullet_removed",
+            "pattern": "Human advocates\\.",
+            "section_title": "External Dependencies",
+            "details_pass": "The older bare human-advocates bullet was removed.",
+            "details_fail": "Detected the older bare human-advocates bullet even though this subsection should have been refreshed."
+          },
+          {
+            "id": "no_participant_bare_dependency_list",
+            "pattern": "patients, family caregivers|family caregivers, patients|provider offices, pharmacies, payers\\.",
+            "section_title": "External Dependencies",
+            "details_pass": "The refreshed subsection did not turn participant roles into bare dependency bullets.",
+            "details_fail": "The refreshed subsection appears to list participant roles as bare external dependencies."
+          },
+          {
+            "id": "no_health_platform_drift",
+            "pattern": "EHR integration|claims processing|claims adjudication|telehealth|clinical triage|caregiver portal|consent-management|consent management|notification infrastructure",
+            "section_title": "External Dependencies",
+            "details_pass": "The refreshed subsection did not invent health-platform or infrastructure capabilities.",
+            "details_fail": "The refreshed subsection invented health-platform or infrastructure capabilities."
+          }
+        ],
+        "preserve_sections": [
+          {
+            "id": "problem_statement_unchanged",
+            "title": "Problem Statement",
+            "details_pass": "The existing `Problem Statement` section remained unchanged, which matches this narrow subsection-refresh request.",
+            "details_fail": "The `Problem Statement` section changed even though the packet only asked to refresh `External Dependencies`."
+          },
+          {
+            "id": "goals_and_non_goals_unchanged",
+            "title": "Goals and Non-Goals",
+            "details_pass": "The existing `Goals and Non-Goals` section remained unchanged, which matches this narrow subsection-refresh request.",
+            "details_fail": "The `Goals and Non-Goals` section changed even though the packet only asked to refresh `External Dependencies`."
+          },
+          {
+            "id": "main_components_unchanged",
+            "title": "Main Components",
+            "details_pass": "The existing `Main Components` subsection remained unchanged, including the current `Advocate Escalation Queue` component wording.",
+            "details_fail": "The `Main Components` subsection changed even though the packet only asked to refresh `External Dependencies`."
+          },
+          {
+            "id": "abstraction_levels_unchanged",
+            "title": "Abstraction Levels",
+            "details_pass": "The existing `Abstraction Levels` subsection remained unchanged, which matches this narrow subsection-refresh request.",
+            "details_fail": "The `Abstraction Levels` subsection changed even though the packet only asked to refresh `External Dependencies`."
+          },
+          {
+            "id": "core_domain_model_unchanged",
+            "title": "Core Domain Model",
+            "details_pass": "The existing `Core Domain Model` section remained unchanged, which matches the narrow update request.",
+            "details_fail": "The `Core Domain Model` section changed even though the packet did not ask for domain-model edits."
+          },
+          {
+            "id": "open_questions_unchanged",
+            "title": "Open Questions",
+            "details_pass": "The existing `Open Questions` section remained unchanged, which matches this narrow subsection-refresh request.",
+            "details_fail": "The `Open Questions` section changed even though the packet only asked to refresh `External Dependencies`."
+          }
+        ]
+      },
+      "packet_files": {
+        "raw_notes": "fixtures/harbor_external_dependencies_refresh/raw_notes.md",
+        "expected_criteria": "fixtures/harbor_external_dependencies_refresh/expected_criteria.md",
+        "existing_spec": "fixtures/harbor_external_dependencies_refresh/existing_spec.md"
+      },
+      "files": [
+        "fixtures/harbor_external_dependencies_refresh/raw_notes.md",
+        "fixtures/harbor_external_dependencies_refresh/existing_spec.md"
+      ]
     }
   ]
 }

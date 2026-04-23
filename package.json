@@ -1,0 +1,30 @@
+{
+  "name": "@lightfastai/skills",
+  "private": true,
+  "packageManager": "bun@1.3.9",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "with-env": "dotenv -e .env --",
+    "baml:generate:foundation": "node ./node_modules/@boundaryml/baml/cli.js generate --from ./skills/foundation-creator/baml_src",
+    "baml:generate:spec": "node ./node_modules/@boundaryml/baml/cli.js generate --from ./skills/spec-creator/baml_src",
+    "eval:foundation": "bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator",
+    "eval:foundation:smoke": "bun run eval:foundation -- --smoke",
+    "eval:spec": "bun run with-env -- bun ./scripts/run-baml-eval.ts spec-creator",
+    "eval:spec:smoke": "bun run eval:spec -- --smoke",
+    "eval:check": "bun ./scripts/check-eval-fixtures.ts foundation-creator spec-creator",
+    "eval:typecheck": "tsc --noEmit --allowImportingTsExtensions --moduleResolution bundler --module esnext --target esnext --skipLibCheck --types node scripts/check-eval-fixtures.ts scripts/run-baml-eval.ts scripts/evals/*.ts scripts/evals/validators/*.ts",
+    "ci:check": "bun run eval:check && bun run baml:generate:foundation && bun run baml:generate:spec && bun run eval:typecheck"
+  },
+  "dependencies": {
+    "@boundaryml/baml": "0.221.0",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "24",
+    "braintrust": "^3.9.0",
+    "dotenv-cli": "^8.0.0"
+  }
+}

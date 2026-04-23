@@ -1,0 +1,286 @@
+{
+  "skill_name": "foundation-creator",
+  "capability_id": "foundation-doc",
+  "runner_contract": {
+    "type": "baml_pipeline",
+    "packet_type": "FoundationEvalPacket",
+    "compile_brief_function": "CompileFoundationBriefFromPacket",
+    "render_document_function": "RenderFoundationDocumentDraft",
+    "evaluate_document_function": "EvaluateFoundationDocument"
+  },
+  "validation_contract": {
+    "type": "reference_document_checks",
+    "validator": "foundation-v1",
+    "template_file": "references/template.md",
+    "language_file": "references/language.md"
+  },
+  "evals": [
+    {
+      "id": 0,
+      "eval_name": "create-foundation-from-vercel-source-packet",
+      "smoke": true,
+      "scenario_type": "source_packet_transition",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "invented_certainty",
+        "scope_bleed",
+        "weak_boundaries"
+      ],
+      "prompt": "Use the source packet in `fixtures/vercel/raw_notes.md` to draft a top-level foundation document for Vercel. Preserve ambiguity where the positioning is in transition. Do not produce a `SPEC.md`, implementation plan, or architecture diagram.",
+      "expected_output": "A top-level foundation document that frames Vercel as a developer cloud/platform company, captures the current tension between `Frontend Cloud` and `AI Cloud`, identifies core surfaces such as deployment workflow, collaboration, security, AI infrastructure, and platform-building, clarifies that Vercel is not just static hosting or general-purpose IaaS, and preserves open questions or strategic bets instead of inventing certainty.",
+      "expected_file": "fixtures/vercel/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/vercel/raw_notes.md",
+        "expected_criteria": "fixtures/vercel/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/vercel/raw_notes.md"
+      ]
+    },
+    {
+      "id": 1,
+      "eval_name": "create-foundation-from-cloudflare-source-packet",
+      "scenario_type": "source_packet_transition",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "invented_certainty",
+        "scope_bleed",
+        "weak_boundaries"
+      ],
+      "prompt": "Use the source packet in `fixtures/cloudflare/raw_notes.md` to draft a top-level foundation document for Cloudflare. Preserve the tension between the connectivity cloud, developer platform, and AI/agents platform framings. Do not produce a `SPEC.md`, implementation plan, or architecture diagram.",
+      "expected_output": "A top-level foundation document that frames Cloudflare as a unified platform spanning security/connectivity, developer infrastructure, and AI surfaces; preserves the tension between `connectivity cloud` and developer/AI platform identities; identifies durable surfaces like network/security control plane, developer runtime, AI infrastructure, and platform-building primitives; clarifies boundaries against generic hyperscaler or single-product framings; and preserves open questions rather than inventing certainty.",
+      "expected_file": "fixtures/cloudflare/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/cloudflare/raw_notes.md",
+        "expected_criteria": "fixtures/cloudflare/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/cloudflare/raw_notes.md"
+      ]
+    },
+    {
+      "id": 2,
+      "eval_name": "create-foundation-from-lightfast-founder-notes",
+      "scenario_type": "founder_notes_ambiguity",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "invented_certainty",
+        "scope_bleed",
+        "weak_boundaries"
+      ],
+      "prompt": "Use the source packet in `fixtures/lightfast_founder_notes/raw_notes.md` to draft a top-level foundation document for Lightfast. Preserve unresolved framing tension. Do not produce a `SPEC.md`, implementation plan, org design, or business strategy memo.",
+      "expected_output": "A top-level foundation document that frames Lightfast as a durable artifact/constraint layer for agent work, preserves the tension between installable skills, compiler/eval/document substrate, and a broader operating layer for durable agent work, identifies surfaces like skill packages, document artifacts, typed contracts, evals, and possible discovery/distribution, clarifies boundaries against chat wrappers, no-code automation, agencies, and fully autonomous company-in-a-box framings, and keeps open questions unresolved instead of inventing certainty.",
+      "expected_file": "fixtures/lightfast_founder_notes/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/lightfast_founder_notes/raw_notes.md",
+        "expected_criteria": "fixtures/lightfast_founder_notes/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/lightfast_founder_notes/raw_notes.md"
+      ]
+    },
+    {
+      "id": 3,
+      "eval_name": "create-foundation-from-harbor-care-source-packet",
+      "scenario_type": "cross_domain_generalization",
+      "input_shape": "source_packet",
+      "ambiguity_level": "high",
+      "domain_profile": "non_developer_domain",
+      "primary_risks": [
+        "source_overfitting",
+        "invented_certainty",
+        "weak_boundaries"
+      ],
+      "prompt": "Use the source packet in `fixtures/harbor_care/raw_notes.md` to draft a top-level foundation document for Harbor Care. Treat it as a trust-heavy care navigation and coordination primitive, not a developer platform. Preserve unresolved framing tension and do not invent clinical authority, business strategy, or implementation detail.",
+      "expected_output": "A top-level foundation document that frames Harbor Care as a care navigation or coordination primitive, preserves the tension between shared longitudinal care picture, coordination operating layer, and benefits/logistics interpreter framings, identifies durable surfaces like intake, shared timeline, coordination, handoffs, and benefits interpretation, clarifies boundaries against telehealth, insurance, EHR, and clinician marketplace framings, and keeps open questions about automation, sponsor shape, and clinical boundary unresolved.",
+      "expected_file": "fixtures/harbor_care/expected_criteria.md",
+      "packet_files": {
+        "raw_notes": "fixtures/harbor_care/raw_notes.md",
+        "expected_criteria": "fixtures/harbor_care/expected_criteria.md"
+      },
+      "files": [
+        "fixtures/harbor_care/raw_notes.md"
+      ]
+    },
+    {
+      "id": 4,
+      "eval_name": "update-lightfast-foundation-boundary-surface-question",
+      "scenario_type": "update_existing_doc",
+      "input_shape": "existing_doc_update",
+      "ambiguity_level": "low",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "update_regression",
+        "template_drift",
+        "invented_certainty"
+      ],
+      "prompt": "We have an existing Lightfast foundation document. Please update it in place: add a boundary clarifying that Lightfast is not a hosted control plane or system of record by default, add a durable surface bullet covering versioned evaluation artifacts and run histories, and add an open question about whether repo-native usage remains the center of gravity or shifts toward a hosted system of record. Keep everything else unchanged.",
+      "expected_output": "The existing Lightfast foundation document is preserved verbatim except for three requested additions: (1) a new boundary clarifying that Lightfast is not a hosted control plane or system of record by default; (2) a new durable surface bullet about versioned evaluation artifacts and run histories; and (3) a new open question about repo-native versus hosted center of gravity. No new sections, planning drift, or first-person language are introduced.",
+      "expected_file": "fixtures/lightfast_foundation_update/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "foundation-update-v1",
+        "template_file": "references/template.md",
+        "language_file": "references/language.md",
+        "existing_foundation_file": "evals/fixtures/existing_foundation.md",
+        "required_patterns": [
+          {
+            "id": "hosted_control_plane_boundary_present",
+            "pattern": "not a hosted control plane or system of record",
+            "flags": "i",
+            "details_pass": "Detected the requested hosted-control-plane/system-of-record boundary.",
+            "details_fail": "Did not detect the requested hosted-control-plane/system-of-record boundary."
+          },
+          {
+            "id": "evaluation_artifacts_surface_present",
+            "pattern": "versioned evaluation artifacts and run histor",
+            "flags": "i",
+            "details_pass": "Detected the requested durable-surface bullet about evaluation artifacts and run histories.",
+            "details_fail": "Did not detect the requested durable-surface bullet about evaluation artifacts and run histories."
+          },
+          {
+            "id": "repo_native_vs_hosted_question_present",
+            "pattern": "repo-native usage remain[s]? the center of gravity.*hosted system of record",
+            "flags": "i",
+            "details_pass": "Detected the requested open question about repo-native versus hosted center of gravity.",
+            "details_fail": "Did not detect the requested open question about repo-native versus hosted center of gravity."
+          }
+        ]
+      },
+      "packet_files": {
+        "expected_criteria": "fixtures/lightfast_foundation_update/expected_criteria.md",
+        "existing_foundation": "fixtures/existing_foundation.md"
+      },
+      "files": [
+        "fixtures/existing_foundation.md"
+      ]
+    },
+    {
+      "id": 5,
+      "eval_name": "update-lightfast-foundation-tighten-overreach",
+      "smoke": true,
+      "scenario_type": "update_existing_doc",
+      "input_shape": "existing_doc_update",
+      "ambiguity_level": "medium",
+      "domain_profile": "company_foundation",
+      "primary_risks": [
+        "update_regression",
+        "invented_certainty",
+        "weak_boundaries"
+      ],
+      "prompt": "We have an older Lightfast foundation draft that overstates a few conclusions. Update it in place: replace the `operating system for durable agent work` framing with narrower source-bound language about a durable artifact or constraint layer for agent work; replace the thesis line about `replacing ambiguous human direction with machine-executable constraints` so it instead frames Lightfast as structuring human judgment through stable constraints; remove settled claims that repo-native is the clear long-term center of gravity or that hosted control planes matter less, and replace them with an explicit open question about repo-native usage versus a hosted control plane, catalog, or distribution surface; rewrite the wedge language so coding workflows are the easiest first wedge because eval loops are tighter, without implying coding is the permanent center of gravity; and soften any remaining categorical `Strategic Bets` language into directional, source-bound signals. Keep the existing heading structure and preserve everything else unless one of these local rewrites requires adjacent wording changes.",
+      "expected_output": "The older Lightfast foundation document is updated in place: the overreaching `operating system` framing is narrowed, the primitive is reframed around structuring human judgment rather than replacing it, settled repo-native superiority claims are removed and restored as an open tension, the wedge language now says coding workflows are the easiest first wedge because eval loops are tighter without implying permanent scope, and any remaining categorical strategic-bet language is softened into directional evidence. Unchanged content stays in place and no new planning or strategy sections are added.",
+      "expected_file": "fixtures/lightfast_foundation_tighten/expected_criteria.md",
+      "validation_contract": {
+        "type": "reference_document_checks",
+        "validator": "foundation-update-v1",
+        "template_file": "references/template.md",
+        "language_file": "references/language.md",
+        "existing_foundation_file": "evals/fixtures/existing_foundation_overconfident.md",
+        "allowed_removed_patterns": [
+          {
+            "pattern": "^Lightfast is an operating system for durable agent work\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- The core primitive is replacing ambiguous human direction with machine-executable constraints\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Repo-native workflows are the clear long-term center of gravity\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Coding is the product center of gravity, not just the initial wedge\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Skills are the wedge and will remain the product center of gravity\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Repo-native distribution matters more than any hosted control plane\\.$",
+            "flags": "i"
+          },
+          {
+            "pattern": "^- Formal constraints and reusable artifacts will outlast raw prompts and transcripts\\.$",
+            "flags": "i"
+          }
+        ],
+        "required_patterns": [
+          {
+            "id": "narrower_artifact_layer_framing_present",
+            "pattern": "source-bound.*durable artifact (?:and|or) constraint layer|source-bound.*durable artifacts? (?:and|or) constraints?|durable artifact (?:and|or) constraint layer.*agent(?:-enabled)? work",
+            "flags": "i",
+            "details_pass": "Detected the narrower durable-artifact/constraint-layer framing in `What This Is`.",
+            "details_fail": "Did not detect the requested narrower durable-artifact/constraint-layer framing."
+          },
+          {
+            "id": "human_judgment_thesis_present",
+            "pattern": "structur(?:e|es|ing) human judgment.*stable(?:,? [a-z-]+)? constraints?(?: and (?:[a-z-]+ )?artifacts?)?|stable(?:,? [a-z-]+)? constraints?(?: and (?:[a-z-]+ )?artifacts?)?.*structur(?:e|es|ing) human judgment",
+            "flags": "i",
+            "details_pass": "Detected the requested thesis language about structuring human judgment through stable constraints.",
+            "details_fail": "Did not detect the requested thesis language about structuring human judgment through stable constraints."
+          },
+          {
+            "id": "coding_first_wedge_is_qualified",
+            "pattern": "coding workflows.*easiest (?:first|initial) wedge because eval(?:uation)? loops are tighter",
+            "flags": "i",
+            "details_pass": "Detected the requested qualified coding-first wedge language.",
+            "details_fail": "Did not detect the requested qualified coding-first wedge language."
+          },
+          {
+            "id": "repo_native_vs_hosted_tension_restored",
+            "pattern": "repo-native.*hosted (?:control plane|catalog|distribution surface)",
+            "flags": "i",
+            "details_pass": "Detected the requested repo-native versus hosted tension.",
+            "details_fail": "Did not detect the requested repo-native versus hosted tension."
+          }
+        ],
+        "forbidden_patterns": [
+          {
+            "id": "operating_system_overreach_removed",
+            "pattern": "operating system for durable agent work",
+            "flags": "i",
+            "details_pass": "Did not detect the overreaching `operating system` framing.",
+            "details_fail": "Still detected the overreaching `operating system` framing."
+          },
+          {
+            "id": "machine_executable_constraint_line_removed",
+            "pattern": "replacing ambiguous human direction with machine-executable constraints",
+            "flags": "i",
+            "details_pass": "Did not detect the old thesis language about replacing ambiguous human direction.",
+            "details_fail": "Still detected the old thesis language about replacing ambiguous human direction."
+          },
+          {
+            "id": "repo_native_winner_claim_removed",
+            "pattern": "repo-native workflows are the clear long-term center of gravity|repo-native distribution matters more than any hosted control plane",
+            "flags": "i",
+            "details_pass": "Did not detect the old settled repo-native winner claims.",
+            "details_fail": "Still detected a settled repo-native winner claim that should have been removed."
+          },
+          {
+            "id": "permanent_wedge_claim_removed",
+            "pattern": "coding is the product center of gravity, not just the initial wedge|skills are the wedge and will remain the product center of gravity",
+            "flags": "i",
+            "details_pass": "Did not detect the old permanent-center-of-gravity wedge claims.",
+            "details_fail": "Still detected a permanent-center-of-gravity wedge claim that should have been removed."
+          }
+        ]
+      },
+      "packet_files": {
+        "expected_criteria": "fixtures/lightfast_foundation_tighten/expected_criteria.md",
+        "existing_foundation": "fixtures/existing_foundation_overconfident.md"
+      },
+      "files": [
+        "fixtures/existing_foundation_overconfident.md"
+      ]
+    }
+  ]
+}
