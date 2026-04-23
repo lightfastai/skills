@@ -37,7 +37,7 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
     - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
     - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Do not phrase `strategic_bets` as direct statements of company intent such as `The company appears to be betting on...`.
-    - Do not use prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
+    - Do not use prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
     - If a possible bet cannot be stated as a source-visible signal without overclaiming, move it to `open_questions` or omit it.
     - Do not use bare `Bet:` labels or categorical claims like `X is the wedge` or `Y is a defensible primitive`.
     - Keep `strategic_bets` short when evidence is weak.
@@ -81,7 +81,7 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
     - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Do not use direct company-intent phrasing such as `The company appears to be betting on...`.
     - Do not use bare `Bet:` labels or categorical statements like `X is the wedge`, `Y is a defensible primitive`, `X will remain the center of gravity`, or `Y matters more than Z`.
-    - Do not use prescriptive verbs like `prioritize`, `invest in`, `ship`, or `treat as first-class` in `Strategic Bets`.
+    - Do not use prescriptive verbs or categorical labels like `prioritize`, `invest in`, `ship`, `treat as first-class`, or `first-class` in `Strategic Bets`.
     - If a would-be strategic bet cannot be phrased as a source-visible signal, convert it into an `Open Questions` bullet or omit it.
     - When a surface is visible but still evolving in the packet, qualify it explicitly as emerging, evolving, or unsettled.
     - Write `Open Questions` as actual unresolved questions, typically ending with `?`.
@@ -128,7 +128,7 @@ function EvaluateFoundationDocument(
     - Penalize paragraph-only rendering of list sections that the template expects as markdown bullets, especially `Strategic Bets` and `Open Questions`.
     - `## Strategic Bets` is a required template section. Do not penalize its presence by itself when the bullets remain source-bound and restrained.
     - Penalize `Strategic Bets` phrased as recommendations, direct company-intent claims, or settled conclusions when the packet only supports directional evidence.
-    - Penalize `Strategic Bets` that use verbs like `prioritize`, `invest in`, `ship`, `treat as first-class`, `will remain`, or `matters more than`, or phrases like `The company appears to be betting on...`.
+    - Penalize `Strategic Bets` that use verbs or labels like `prioritize`, `invest in`, `ship`, `treat as first-class`, `first-class`, `will remain`, or `matters more than`, or phrases like `The company appears to be betting on...`.
     - Penalize evidence-source mismatch inside `Strategic Bets`, such as `Public materials suggest...` when the packet only contains founder notes or internal notes.
     - Penalize flattening transitional surfaces as fully settled if the packet presents them as evolving.
     - Penalize `Open Questions` that silently resolve ambiguity instead of keeping it open.
