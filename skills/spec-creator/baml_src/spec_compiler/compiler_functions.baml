@@ -46,6 +46,8 @@ function CompileSpecBrief(raw_notes: string, existing_spec: string?) -> SpecBrie
     - Keep packet-named service surfaces distinct when they matter. For example, if the notes name teams separately from projects, do not silently collapse teams into projects.
     - If the notes name an ordered lineage, pipeline, or stage progression, preserve each materially distinct stage somewhere in the brief. Do not collapse named intermediate stages such as `brief` into a broader `draft` label unless the notes themselves do so.
     - Use `lineage_stages` for packet-named ordered stages that materially shape the service, such as `raw request`, `packet`, `brief`, `draft`, `evaluation`, or `approval`. If the notes name such stages, preserve them there in source order.
+    - If `lineage_stages` includes an intermediate `brief` stage, make that stage visible in at least one `component` or `abstraction_layer` responsibility; do not rely on `lineage_stages` alone.
+    - If the notes treat `brief` as part of a durable source-to-decision trail, preserve it with the smallest source-backed domain representation, such as `brief_text` on a packet or work record, unless the notes make a separate brief entity necessary.
     - Distinct source-visible surfaces do not automatically require distinct entities. Preserve the distinction in purpose, components, dependencies, or unresolved questions unless the notes clearly support separate first-class records.
     - Use `actors` for source-backed participant roles that shape the service boundary, coordination model, or human escalation path. Human advocates, caregivers, reviewers, operators, patients, providers, and similar participants belong in `actors`.
     - Use `service_surfaces` for stable, source-backed coordination surfaces such as inboxes, queues, shared records, timelines, cases, or similar user-visible surfaces. If the notes imply one of these surfaces, preserve it there even if the wording is tentative.
@@ -215,9 +217,12 @@ function RenderSpecCreatorPrompt(brief: SpecBrief) -> string {
     - If the brief mentions approved-client restrictions, keep that phrased as a boundary or restriction, not as an approval-state system or internal status object.
     - Require packet-named surfaces to remain visible when they materially matter. For example, if the brief distinguishes teams from projects, keep that distinction somewhere in the spec instead of collapsing it away.
     - If `lineage_stages` are present, preserve every materially distinct stage from that list somewhere in the document. Mentioning the ordered stages in prose is acceptable even when not every stage becomes a domain entity.
+    - If `lineage_stages` includes `brief`, explicitly include `brief` in the System Overview's lineage or history component, not only in the Problem Statement.
+    - If `lineage_stages` includes `raw request`, `packet`, `brief`, `candidate artifact`, `eval run`, and `approval/rejection`, preserve that ordered trail verbatim or as a close ordered paraphrase in the System Overview.
     - If `service_surfaces` are present, keep at least one of those surfaces visible in the Purpose or System Overview so the service is not reduced to stage sequencing alone.
     - If `service_surfaces` include versioned history, a timeline, or an approval trail, keep at least one such history-bearing surface visible in the Purpose, Problem Statement, or System Overview rather than only generic `traceability` language.
     - If the brief names an ordered lineage or artifact pipeline, preserve every materially distinct stage somewhere in the document. If the brief includes a stage like `brief` between packet and candidate artifact, keep that stage visible in the Problem Statement, System Overview, or another prose section even if it is not a domain entity.
+    - If the brief includes a `brief` lineage stage and a packet/work entity, include a minimal `brief_text`, `brief_summary`, or equivalent source-backed field when the brief treats that stage as part of the durable trail.
     - Require the domain model to stay conservative:
       - include only entities materially supported by the brief
       - render every entity in `brief.entities` as its own `#### 4.1.x EntityName` heading with its own `Fields:` block; do not merge fields from one entity into another entity
