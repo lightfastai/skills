@@ -71,7 +71,7 @@ function packetAllowsPublicMaterialsLead(packet) {
 
 function strategicBetUsesApprovedLead(line, { allowPublicMaterialsLead = true } = {}) {
   const publicLeadPattern = allowPublicMaterialsLead
-    ? "|Public materials suggest(?:\\s+a bet on|\\s+that)?"
+    ? "|Public materials (?:suggest|indicate|emphasize)(?:\\s+a bet on|\\s+that)?"
     : "";
 
   return new RegExp(
@@ -221,7 +221,7 @@ export function validateFoundationDocument(candidateDocument, templateText, _lan
       hedgedStrategicBets
         ? "Strategic Bets use approved source-centered lead phrasing."
         : allowPublicMaterialsLead
-          ? "One or more Strategic Bets bullets do not begin with approved source-centered phrasing such as `The notes suggest...`, `There are visible signals that...`, `The source material indicates...`, or `The source material emphasizes...`."
+          ? "One or more Strategic Bets bullets do not begin with approved source-centered phrasing such as `The notes suggest...`, `There are visible signals that...`, `Public materials suggest...`, `Public materials indicate...`, `The source material indicates...`, or `The source material emphasizes...`."
           : "One or more Strategic Bets bullets use evidence-source phrasing that does not match a notes-only packet. In note-only packets, use `The notes suggest...`, `There are visible signals that...`, `The source material indicates...`, or `The source material emphasizes...`.",
     ),
     createCheck(

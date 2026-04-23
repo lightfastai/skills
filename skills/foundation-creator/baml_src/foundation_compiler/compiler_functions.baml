@@ -86,7 +86,7 @@ function CompileFoundationBrief(
     - Treat `strategic_bets` as source-visible directional signals, not recommendations or settled future state.
     - Each `strategic_bets` item must begin with an evidence-matched source-centered opening.
     - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
-    - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
+    - For public-source packets, use `Public materials suggest...`, `Public materials indicate...`, or `Public materials emphasize...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Avoid wording that attributes settled intent directly to the company, such as `The company appears to be betting on...`.
     - Forbid prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
     - Avoid comparative durability claims in `Strategic Bets` such as `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
@@ -143,7 +143,7 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Require `Strategic Bets` to be phrased as source-visible directional signals rather than prescriptions or settled company posture.
     - Require each `Strategic Bets` bullet to begin with an evidence-matched source-centered opening.
     - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
-    - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
+    - For public-source packets, use `Public materials suggest...`, `Public materials indicate...`, or `Public materials emphasize...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Forbid wording like `The company appears to be betting on...`, bare `Bet:` labels, or categorical claims like `X is the wedge`, `Y is a defensible primitive`, `X will remain the center of gravity`, or `Y matters more than Z`.
     - Forbid prescriptive verbs and categorical labels in `Strategic Bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, or `first-class`.
     - Avoid comparative durability claims in `Strategic Bets` such as `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
