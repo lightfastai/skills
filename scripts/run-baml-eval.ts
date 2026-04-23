@@ -148,6 +148,42 @@ function buildTrialArtifacts(trialResult) {
   };
 }
 
+function printNonPassDetails(suiteResults, suiteDir) {
+  const nonPassResults = suiteResults.filter(
+    (result) => result.current_summary.combined_worst_status !== "Pass",
+  );
+
+  if (nonPassResults.length === 0) {
+    return;
+  }
+
+  console.log("Non-pass details:");
+  for (const result of nonPassResults) {
+    const summary = result.current_summary;
+    const artifactPath = suiteDir
+      ? path.relative(suiteDir, result.run_dir).split(path.sep).join("/")
+      : result.run_dir;
+
+    console.log(
+      `- ${result.eval_name}: LLM ${summary.llm_worst_status}, Combined ${summary.combined_worst_status}, Deterministic pass rate ${summary.deterministic_pass_rate}, artifacts ${artifactPath}`,
+    );
+
+    if (result.error) {
+      console.log(`  error: ${result.error}`);
+    }
+
+    const failedChecks = summary.failed_deterministic_checks ?? [];
+    if (failedChecks.length > 0) {
+      console.log(`  failed deterministic checks: ${failedChecks.join(", ")}`);
+    }
+
+    const openIssues = summary.llm_open_issues ?? [];
+    if (openIssues.length > 0) {
+      console.log(`  LLM open issues: ${openIssues.join(" | ")}`);
+    }
+  }
+}
+
 async function runDeterministicOnlyTrial({
   candidateDocumentPath,
   evalEntry,
@@ -595,6 +631,10 @@ async function main() {
             });
 
         suiteResults.push(evalResult);
+        if (!runSuite && evalResult.current_summary.combined_worst_status !== "Pass") {
+          printNonPassDetails([evalResult], null);
+          process.exitCode = 1;
+        }
       } catch (error) {
         if (!runSuite) {
           throw error;
@@ -620,6 +660,8 @@ async function main() {
             llm_worst_status: "Fail",
             combined_worst_status: "Fail",
             deterministic_pass_rate: 0,
+            failed_deterministic_checks: [],
+            llm_open_issues: [],
           },
         });
       }
@@ -646,6 +688,7 @@ async function main() {
       console.log(`\nSuite complete: ${suiteDir}`);
       console.log(`Evals: ${suiteResults.length}`);
       console.log(`Non-pass evals: ${suiteSummary.non_pass_count}`);
+      printNonPassDetails(suiteResults, suiteDir);
 
       if (suiteSummary.non_pass_count > 0) {
         process.exitCode = 1;

@@ -20,6 +20,8 @@ Current modules:
 - `reports.ts` builds benchmark, comparison, and suite-summary artifacts.
 - `runtime.ts` owns process/runtime helpers such as command execution and file
   loading.
+- `static-checks.ts` validates manifest, fixture, BAML runner, and regex
+  contracts without model calls.
 - `status.ts` owns pass/partial/fail ordering and numeric summaries.
 - `text.ts` owns markdown/text normalization helpers.
 - `variants.ts` materializes current, git, and profile-based skill variants.

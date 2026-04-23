@@ -28,6 +28,7 @@ This repo now includes BAML-backed fixture evals for `foundation-creator` and
 ```bash
 bun install
 bun run ci:check
+bun run eval:check
 bun run eval:typecheck
 bun run eval:foundation -- create-foundation-from-vercel-source-packet
 bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
@@ -44,6 +45,10 @@ bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator create-fou
 
 Each run writes packet, brief, candidate document, and evaluation report
 artifacts under `skills/<skill>/evals/runs/`.
+
+`bun run eval:check` is the cheap deterministic CI guard. It validates eval
+manifests, fixture paths, validation regexes, smoke membership, and BAML runner
+function wiring without calling any model.
 
 Current `foundation-creator` corpus includes:
 

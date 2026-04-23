@@ -14,8 +14,9 @@
     "eval:foundation:smoke": "bun run eval:foundation -- --smoke",
     "eval:spec": "bun run with-env -- bun ./scripts/run-baml-eval.ts spec-creator",
     "eval:spec:smoke": "bun run eval:spec -- --smoke",
-    "eval:typecheck": "tsc --noEmit --allowImportingTsExtensions --moduleResolution bundler --module esnext --target esnext --skipLibCheck --types node scripts/run-baml-eval.ts scripts/evals/*.ts scripts/evals/validators/*.ts",
-    "ci:check": "bun run baml:generate:foundation && bun run baml:generate:spec && bun run eval:typecheck"
+    "eval:check": "bun ./scripts/check-eval-fixtures.ts foundation-creator spec-creator",
+    "eval:typecheck": "tsc --noEmit --allowImportingTsExtensions --moduleResolution bundler --module esnext --target esnext --skipLibCheck --types node scripts/check-eval-fixtures.ts scripts/run-baml-eval.ts scripts/evals/*.ts scripts/evals/validators/*.ts",
+    "ci:check": "bun run eval:check && bun run baml:generate:foundation && bun run baml:generate:spec && bun run eval:typecheck"
   },
   "dependencies": {
     "@boundaryml/baml": "0.221.0",

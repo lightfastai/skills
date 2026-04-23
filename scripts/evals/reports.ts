@@ -9,6 +9,18 @@ export function buildBenchmark(skillName, evalEntry, trials, capabilityId = skil
   const deterministicPassCount = trials.filter(
     (trial) => trial.deterministic_checks.overall_pass,
   ).length;
+  const failedDeterministicChecks = [
+    ...new Set(
+      trials.flatMap((trial) =>
+        trial.deterministic_checks.checks
+          .filter((check) => !check.passed)
+          .map((check) => check.id),
+      ),
+    ),
+  ];
+  const llmOpenIssues = trials.flatMap((trial) =>
+    Array.isArray(trial.report.open_issues) ? trial.report.open_issues : [],
+  );
 
   const checkStats = new Map();
   for (const trial of trials) {
@@ -50,6 +62,8 @@ export function buildBenchmark(skillName, evalEntry, trials, capabilityId = skil
       llm_worst_status: worstStatus(judgeStatuses),
       combined_worst_status: worstStatus(combinedStatuses),
       deterministic_pass_rate: Number((deterministicPassCount / trials.length).toFixed(2)),
+      failed_deterministic_checks: failedDeterministicChecks,
+      llm_open_issues: llmOpenIssues,
     },
     trial_summaries: trials.map((trial, index) => ({
       trial: index + 1,
@@ -210,6 +224,9 @@ export function buildSuiteSummary({
       llm_worst_status: result.current_summary.llm_worst_status,
       combined_worst_status: result.current_summary.combined_worst_status,
       deterministic_pass_rate: result.current_summary.deterministic_pass_rate,
+      failed_deterministic_checks:
+        result.current_summary.failed_deterministic_checks ?? [],
+      llm_open_issues: result.current_summary.llm_open_issues ?? [],
       error: result.error ?? null,
     })),
   };
