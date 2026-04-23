@@ -54,7 +54,8 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
     - Do not model clients, endpoints, documentation search results, approval lists, or ambiguous aliases as entities unless the packet clearly treats them as durable service records with stable fields and behavior.
     - When two labels may describe overlapping context, such as team versus workspace context, keep the ambiguity explicit instead of multiplying entities.
     - Do not add umbrella subject fields such as `subject`, `case_subject`, `party`, or similarly generalized placeholders when the packet already frames participants or care context more concretely. Prefer packet-backed wording or omit the field.
-    - Every entity field must be directly supported by the packet or be the minimal identity/status field required to keep the entity coherent. Prefer fewer fields over speculative completeness.
+    - Every entity field must be directly supported by the packet. Prefer fewer fields over speculative completeness.
+    - Do not add generic `id`, `stable identifier`, `status`, `outcome`, or correlation fields solely to make records look complete. Use prose, components, or lineage language for traceability unless the packet names record identifiers or states directly.
     - If the packet mentions lightweight status states while warning against full workflow or BPM modeling, do not add generic `status` fields to entities unless the status values are directly source-backed and essential to the record.
     - When the packet describes a transition-state resource surface rather than a record-centric system, default to the sparsest viable entities. One minimal identifying field may be enough.
     - Do not infer relationship fields, lifecycle/status fields, or embedded collections such as `project_id`, `status`, or `logs` unless the packet clearly supports them.
@@ -157,8 +158,9 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
     - Keep `Important boundary:` as a standalone labeled block inside `## 1. Problem Statement`, followed by bullets. Do not turn it into a standalone section.
     - Use a numbered list for `### 3.1 Main Components` in the form `1. `Component Name`` followed by indented responsibility bullets.
     - Use a numbered list for `### 3.2 Abstraction Levels` in the form `1. `Layer Name`` followed by indented responsibility bullets.
-    - For entities, use `#### 4.1.x EntityName`, then `Fields:`, then field lines in the form `- `field_name` (type, constraints)` with indented semantic bullets and optional `Default: `value`` lines.
+    - For entities, use `#### 4.1.x EntityName`, then `Fields:`, then field lines in the form `- `field_name` (type)` with indented semantic bullets and optional `Default: `value`` lines.
     - Use logical field types (`string`, `integer`, `boolean`, `timestamp`, `list of strings`, `map`, `string or null`), not implementation types.
+    - In field lines, put only the logical type inside parentheses. Do not append descriptions, labels, constraints, `stable identifier`, `original rough request`, `optional reviewer comments`, or similar semantic text inside the parentheses.
     - List external dependencies as systems or services, not low-level API method names, SDK calls, token mechanics, registry internals, classes, or internal implementation choices.
     - When a dependency is tentative in the packet or brief, keep that tentativeness visible with wording like `if present`, `when used`, or `if evaluations are external` rather than presenting the dependency as always required.
     - When evaluation is optional, qualified, or external in the brief, describe the service as coordinating evaluation runs or attaching evaluation results rather than claiming it always performs the evaluation itself.
@@ -183,6 +185,7 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
       - preserve entity names from the brief exactly unless the name itself is malformed
       - prefer fewer entities over speculative completeness
       - use minimal source-backed fields
+      - omit generic `id`, `stable identifier`, `status`, `outcome`, or correlation fields unless the packet or brief directly names the identifier or state as service behavior
       - if a concept lacks enough support for a stable entity schema, keep it out of `## 4. Core Domain Model`
       - avoid second-order record types when a smaller set of entities or fields already makes the behavior legible
       - preserve packet-named distinctions somewhere in the document without forcing every named surface into the domain model
@@ -196,13 +199,16 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
       - if a surface is explicitly ambiguous or alias-like, such as `team` versus `workspace context`, keep it out of the domain model unless the brief clearly establishes it as a durable record
       - avoid component names like `gate` or dependency phrases like `client status` when the brief only supports externally visible access restrictions
       - keep entity count modest; more than roughly six entities should be rare and strongly justified by the brief
-    - In field lines, use only logical types and source-backed constraints.
+    - In field lines, use only logical types inside parentheses and move all semantics into the indented bullets.
     - Do not add generic `status` fields just because a brief or packet mentions lightweight state. Include status fields only when the source makes status values essential and not merely a warning against over-modeling workflow state.
     - Do not put `required`, `optional`, `non-empty`, `unique`, or invented service-scope constraints inside the field parentheses.
     - If requirement state matters, express it in the indented semantic bullet rather than inside the type parentheses.
     - Preserve uncertainty where the source packet is in transition.
     - Avoid implementation detail.
     - If `unresolved_questions` is non-empty, add `## 5. Open Questions` after the domain model and render every question as a markdown bullet.
+    - If `brief.unresolved_questions` is non-empty, omitting `## 5. Open Questions` is invalid even when the rest of the spec is complete.
+    - Do not stop at `## 4. Core Domain Model` when `unresolved_questions` are present.
+    - Do not place unresolved questions only in `Important boundary`, goals, non-goals, or prose; render the explicit `## 5. Open Questions` section.
     - When `unresolved_questions` are present, render every materially distinct item from the brief exactly once. Do not drop one for brevity, substitute only a subset, or move the questions only into boundary prose.
     - When multiple unresolved questions are present, preserve the distinct tensions rather than reducing them to a single generic question.
     - Keep `## 5. Open Questions` source-bound. If the brief names a structural tension such as repo-native vs hosted, family-direct vs sponsored, or automation vs human ownership, carry that tension forward explicitly.
@@ -211,6 +217,7 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
     - When write scope is unresolved, ask which specific mutations, if any, are supported. Do not describe the question itself in a way that implies broader actions are already established.
     - Optional extra sections are allowed only when the brief materially needs them; if used, place them after `## 4. Core Domain Model`.
     - Do not add end markers, appendix-only filler, or operational/program-management sections unless the brief explicitly requires them.
+    - Do not append a `Rules`, `Evaluation Rules`, `Criteria`, or evaluator-instruction section to the candidate `SPEC.md`.
     - If `existing_spec` is present, treat this as update mode:
       - start from `existing_spec`
       - preserve all unchanged lines verbatim

@@ -10,8 +10,11 @@ import {
   createCheck,
   createPatternChecks,
   createPreservedSectionChecks,
+  extractMarkdownBullets,
   extractNormalizedMarkdownBlocks,
+  extractMarkdownSectionBodies,
   filterLinesByPatternSpecs,
+  findSectionBody,
   removeReplaceableSectionContent,
 } from "./markdown.ts";
 
@@ -49,10 +52,20 @@ function lineExists(lines, matcher) {
   return lines.some((line) => matcher(normalizeHeading(line)));
 }
 
-export function validateSpecDocument(candidateDocument, templateText) {
+function packetRequiresOpenQuestions(packet) {
+  const rawNotes = typeof packet?.raw_notes === "string" ? packet.raw_notes : "";
+  const expectedCriteria =
+    typeof packet?.expected_criteria === "string" ? packet.expected_criteria : "";
+  const combined = `${rawNotes}\n${expectedCriteria}`;
+
+  return /\bUnresolved:\b/i.test(combined) || /\bopen questions?\b/i.test(combined);
+}
+
+export function validateSpecDocument(candidateDocument, templateText, packet = null) {
   const requiredSections = extractSpecMajorSections(templateText);
   const requiredSubsections = extractSpecSubsections(templateText);
   const lines = candidateDocument.split(/\r?\n/);
+  const sectionBodies = extractMarkdownSectionBodies(candidateDocument).bodies;
   const missingSections = requiredSections.filter(
     (section) =>
       !lineExists(
@@ -87,6 +100,11 @@ export function validateSpecDocument(candidateDocument, templateText) {
   const domainModelShapeAcceptable = hasFieldFormatting || declaresNoDurableEntities;
   const fieldLinesAvoidRequirementKeywords =
     !/- `[^`]+` \([^)]*\b(required|optional)\b[^)]*\)/i.test(candidateDocument);
+  const openQuestionsRequired = packetRequiresOpenQuestions(packet);
+  const openQuestionsBody = findSectionBody(sectionBodies, "Open Questions") ?? "";
+  const openQuestionBullets = extractMarkdownBullets(openQuestionsBody);
+  const preservesExplicitOpenQuestions =
+    !openQuestionsRequired || openQuestionBullets.length > 0;
 
   return [
     createCheck(
@@ -160,6 +178,15 @@ export function validateSpecDocument(candidateDocument, templateText) {
       fieldLinesAvoidRequirementKeywords
         ? "Field type parentheses avoid `required`/`optional` labels."
         : "Detected `required` or `optional` inside field type parentheses; keep those details in the description bullets instead.",
+    ),
+    createCheck(
+      "explicit_open_questions_preserved",
+      preservesExplicitOpenQuestions,
+      preservesExplicitOpenQuestions
+        ? openQuestionsRequired
+          ? "Packet-level unresolved questions are preserved in an `Open Questions` section."
+          : "Packet does not require an explicit `Open Questions` section."
+        : "Packet includes explicit unresolved/open-question material, but the candidate did not render an `Open Questions` section with bullets.",
     ),
     createCheck(
       "no_first_or_second_person",
