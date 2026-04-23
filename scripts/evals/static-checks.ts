@@ -28,6 +28,13 @@ const patternFields = [
   "required_patterns",
 ];
 
+const taxonomyStringFields = [
+  "scenario_type",
+  "input_shape",
+  "ambiguity_level",
+  "domain_profile",
+];
+
 function issue(issues, scope, message) {
   issues.push({ scope, message });
 }
@@ -279,6 +286,13 @@ async function checkEvalEntry(evalEntry, context) {
   }
 
   checkNonEmptyString(evalEntry.prompt, issues, scope, "prompt");
+  for (const field of taxonomyStringFields) {
+    checkNonEmptyString(evalEntry[field], issues, scope, field);
+  }
+  checkStringArray(evalEntry.primary_risks, issues, scope, "primary_risks");
+  if (Array.isArray(evalEntry.primary_risks) && evalEntry.primary_risks.length === 0) {
+    issue(issues, scope, "'primary_risks' must include at least one risk.");
+  }
   if (
     typeof evalEntry.expected_output !== "string" &&
     typeof evalEntry.expected_file !== "string" &&

@@ -33,6 +33,9 @@ show up in `benchmark.json` so runs can be grouped by failure mode later.
 - `update_existing_doc`
   - Existing document is the dominant constraint; success depends on precise
     in-place edits without broad drift.
+- `update_existing_doc_from_source_packet`
+  - Existing document remains the dominant constraint, but a messy source packet
+    or addendum supplies the requested change.
 - `founder_notes_ambiguity`
   - Highly ambiguous notes where positioning, boundaries, and unresolved
     questions matter more than completeness.
@@ -59,6 +62,8 @@ show up in `benchmark.json` so runs can be grouped by failure mode later.
 
 - `developer_infrastructure`
 - `company_foundation`
+- `agent_work_infrastructure`
+- `care_operations`
 - `non_developer_domain`
 
 ### `primary_risks`
@@ -67,9 +72,14 @@ Use a short list of the dominant failure modes for the eval. Current common
 values:
 
 - `template_drift`
+- `boundary_drift`
+- `dependency_boundary_drift`
+- `foundation_language_drift`
 - `implementation_leakage`
 - `invented_capabilities`
 - `invented_certainty`
+- `micro_paraphrase_drift`
+- `section_rewrite_drift`
 - `scope_bleed`
 - `source_overfitting`
 - `weak_boundaries`

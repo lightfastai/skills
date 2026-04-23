@@ -31,9 +31,11 @@ How the foundation document should be worded.
 - `Strategic Bets` should be framed as observed directional signals or bets
   rather than recommendations. Match the lead phrase to the evidence:
   for note-only packets, prefer `the notes suggest...`,
-  `there are visible signals that...`, or `the source material indicates...`.
-  Use `public materials suggest...` only when the packet explicitly cites
-  public docs, press releases, or other external sources.
+  `there are visible signals that...`, `the source material suggests...`, or
+  `the source material indicates...`. Use `public materials suggest...`,
+  `public materials indicate...`, or `public materials emphasize...` only when
+  the packet explicitly cites public docs, press releases, or other external
+  sources.
 
 ## 4. Restraint Rules
 
@@ -60,10 +62,11 @@ How the foundation document should be worded.
 - `Strategic Bets` should be minimal and clearly grounded in repeated signals.
   Each bullet should start with visible-evidence language that matches the
   packet. For note-only packets, use `the notes suggest...`,
-  `there are visible signals that...`, or `the source material indicates...`.
-  Use `public materials suggest...` only when the packet explicitly cites
-  public docs, press releases, or other external sources, rather than settled
-  declarations or recommendations.
+  `there are visible signals that...`, `the source material suggests...`, or
+  `the source material indicates...`. Use `public materials suggest...`,
+  `public materials indicate...`, or `public materials emphasize...` only when
+  the packet explicitly cites public docs, press releases, or other external
+  sources, rather than settled declarations or recommendations.
   Avoid naked labels like `Bet:`. Avoid company-intent phrasing like
   `the company appears to be betting on...`. Avoid categorical claims like
   `X is the wedge`, `Y is a defensible primitive`, `X will remain the center

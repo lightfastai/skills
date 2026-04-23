@@ -25,4 +25,3 @@
 - The output should not invent monetization, marketplace certainty, internal
   org structure, financial claims, or execution plans that are not present in
   the notes.
-

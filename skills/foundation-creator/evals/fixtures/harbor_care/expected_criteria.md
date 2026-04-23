@@ -21,4 +21,3 @@
 - The output should not invent medical claims, treatment outcomes, revenue
   model, internal org structure, or unsupported platform surfaces not present in
   the packet.
-

@@ -73,4 +73,3 @@ plans.
 - Open question:
   should Lightfast remain repo-native first, or eventually become a hosted
   system of record for agent work?
-

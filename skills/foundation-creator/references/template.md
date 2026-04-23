@@ -35,9 +35,10 @@ for each item.
 - {The notes suggest a bet on ...}
 - {The source material indicates ...}
 
-Match the lead phrase to the packet. Use `Public materials suggest...` only
-when the packet explicitly cites public docs, press releases, or other
-external sources.
+Match the lead phrase to the packet. Use `Public materials suggest...`,
+`Public materials indicate...`, or `Public materials emphasize...` only when
+the packet explicitly cites public docs, press releases, or other external
+sources.
 
 ## Open Questions
 
