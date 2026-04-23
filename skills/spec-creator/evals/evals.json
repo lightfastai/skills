@@ -695,7 +695,7 @@
           },
           {
             "id": "repo_execution_boundary_present",
-            "pattern": "repo mutation|mutating repositories|apply(?:ing)? approved changes|apply changes(?: directly)? to (?:the )?repo|CI runner|running CI|deployment executor|deploying outputs|post-approval execution surface|automatic(?:ally)? apply approved",
+            "pattern": "repo(?:sitory)? mutation|mutating repositories|appl(?:y|ies|ying)(?: approved)? changes|apply changes(?: directly)? to (?:the )?repo|CI runner|runs? CI|running CI|deployment executor|deploys? work|deploying outputs|post-approval (?:execution )?surface|automatic(?:ally)? apply approved",
             "section_title": "Non-Goals",
             "details_pass": "Detected a refreshed boundary against repo mutation or execution behavior.",
             "details_fail": "Did not detect a refreshed boundary against repo mutation or execution behavior."

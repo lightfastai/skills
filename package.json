@@ -7,8 +7,8 @@
     "with-env": "dotenv -e .env --",
     "baml:generate:foundation": "node ./node_modules/@boundaryml/baml/cli.js generate --from ./skills/foundation-creator/baml_src",
     "baml:generate:spec": "node ./node_modules/@boundaryml/baml/cli.js generate --from ./skills/spec-creator/baml_src",
-    "eval:foundation": "bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator",
-    "eval:spec": "bun run with-env -- node ./scripts/run-baml-eval.mjs spec-creator"
+    "eval:foundation": "bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator",
+    "eval:spec": "bun run with-env -- bun ./scripts/run-baml-eval.ts spec-creator"
   },
   "dependencies": {
     "@boundaryml/baml": "0.221.0",

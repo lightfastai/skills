@@ -32,9 +32,10 @@ bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
 bun run eval:foundation -- update-lightfast-foundation-boundary-surface-question
 bun run eval:foundation -- update-lightfast-foundation-tighten-overreach
 bun run eval:spec -- create-from-vercel-mcp-source-packet
-bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-cloudflare-source-packet --eval-profile gate --trials 3
-bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator update-lightfast-foundation-tighten-overreach --eval-profile fast --compare previous,profile:no-skill
-bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-lightfast-founder-notes --eval-profile cross
+bun run eval:spec -- --all
+bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator create-foundation-from-cloudflare-source-packet --eval-profile gate --trials 3
+bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator update-lightfast-foundation-tighten-overreach --eval-profile fast --compare previous,profile:no-skill
+bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator create-foundation-from-lightfast-founder-notes --eval-profile cross
 ```
 
 Each run writes packet, brief, candidate document, and evaluation report
@@ -64,6 +65,15 @@ When `--compare` is used, the run directory also includes:
   current skill's evaluator
 - `variants/<label>/...` — per-variant packet/brief/candidate/report artifacts
   and `benchmark.json`
+
+When `--all` is used, the runner executes every eval in the selected skill
+manifest and writes a suite directory under `skills/<skill>/evals/runs/` with:
+
+- `suite.json` — aggregate status summary for every eval in the manifest
+- `<eval-name>/...` — the normal per-eval artifacts for each manifest entry
+
+Suite mode exits nonzero if any eval has a non-`Pass` combined status, making it
+suitable for CI gates.
 
 Current comparison variants:
 
@@ -103,7 +113,7 @@ When `--trials N` is used, the run directory contains `trial-1/`, `trial-2/`,
 For other local commands that should inherit `.env`, use:
 
 ```bash
-bun run with-env -- node ./scripts/run-baml-eval.mjs foundation-creator create-foundation-from-vercel-source-packet
+bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator create-foundation-from-vercel-source-packet
 ```
 
 ## License
