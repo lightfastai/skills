@@ -9,6 +9,8 @@ Current modules:
 - `artifacts.ts` owns local artifact writes and deterministic-only candidate
   artifact discovery.
 - `baml.ts` regenerates and imports generated BAML clients.
+- `../braintrust-evals.ts` is a terminal inspector for Braintrust experiments;
+  it stays outside the runner core and talks to Braintrust through API/BTQL.
 - `cli.ts` parses command-line flags into a runner request.
 - `git.ts` captures lightweight git metadata for experiment names and reporter
   metadata.

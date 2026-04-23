@@ -129,6 +129,9 @@
         "template_file": "references/template.md",
         "language_file": "references/language.md",
         "existing_foundation_file": "evals/fixtures/existing_foundation.md",
+        "skip_base_check_ids": [
+          "strategic_bets_use_directional_language"
+        ],
         "required_patterns": [
           {
             "id": "hosted_control_plane_boundary_present",

@@ -15,7 +15,10 @@
     "eval:spec": "bun run with-env -- bun ./scripts/run-baml-eval.ts spec-creator",
     "eval:spec:smoke": "bun run eval:spec -- --smoke",
     "eval:check": "bun ./scripts/check-eval-fixtures.ts foundation-creator spec-creator",
-    "eval:typecheck": "tsc --noEmit --allowImportingTsExtensions --moduleResolution bundler --module esnext --target esnext --skipLibCheck --types node scripts/check-eval-fixtures.ts scripts/run-baml-eval.ts scripts/evals/*.ts scripts/evals/validators/*.ts",
+    "eval:typecheck": "tsc --noEmit --allowImportingTsExtensions --moduleResolution bundler --module esnext --target esnext --skipLibCheck --types node scripts/check-eval-fixtures.ts scripts/run-baml-eval.ts scripts/braintrust-evals.ts scripts/evals/*.ts scripts/evals/validators/*.ts",
+    "braintrust:list": "bun run with-env -- bun ./scripts/braintrust-evals.ts list",
+    "braintrust:latest": "bun run with-env -- bun ./scripts/braintrust-evals.ts latest",
+    "braintrust:show": "bun run with-env -- bun ./scripts/braintrust-evals.ts show",
     "ci:check": "bun run eval:check && bun run baml:generate:foundation && bun run baml:generate:spec && bun run eval:typecheck"
   },
   "dependencies": {

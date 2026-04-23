@@ -27,7 +27,7 @@
         "implementation_leakage"
       ],
       "prompt": "Can you write a SPEC.md for a service we're building called Glacier Tier Manager? It watches S3 buckets and moves old objects to Glacier Deep Archive after policy-defined age thresholds. Polling, not event-driven — we want deterministic cadence. Main components: a Bucket Poller that lists objects on a schedule, a Policy Evaluator that decides which objects are eligible, and a Tiering Executor that issues the storage-class change. External deps: S3 API and per-bucket lifecycle policy files. Not a general-purpose cost optimizer — it only does tiering.",
-      "expected_output": "A SPEC.md at repo root covering Purpose, Problem Statement (with 3 bullets + 'Important boundary' block), Goals + Non-Goals (non-goal should reflect 'not a cost optimizer'), System Overview with the three named components, External Dependencies, and a Core Domain Model. Voice is third-person, fields use the `name` (type) format, obligation keywords are lowercase.",
+      "expected_output": "A SPEC.md at repo root covering Purpose, Problem Statement (with 3 bullets + 'Important boundary' block), Goals + Non-Goals (non-goal should reflect 'not a cost optimizer'), System Overview with the three named components, External Dependencies, and a Core Domain Model. Voice is third-person and obligation keywords are lowercase. If the source supports durable service-owned entities, fields use the `name` (type) format; if it does not, the Core Domain Model may explicitly state that no durable service-specific entities are defined.",
       "files": []
     },
     {
