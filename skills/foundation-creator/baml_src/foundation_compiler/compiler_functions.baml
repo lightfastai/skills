@@ -89,6 +89,7 @@ function CompileFoundationBrief(
     - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Avoid wording that attributes settled intent directly to the company, such as `The company appears to be betting on...`.
     - Forbid prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
+    - Avoid comparative durability claims in `Strategic Bets` such as `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
     - If a possible bet cannot be phrased as a source-visible signal without overclaiming, move it to `open_questions` or omit it.
     - If a surface is visible but still in transition, preserve that qualification in the surrounding summary or questions.
     - Avoid market-leadership or competitive-superiority language unless directly supported by source material.
@@ -140,6 +141,7 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Forbid wording like `The company appears to be betting on...`, bare `Bet:` labels, or categorical claims like `X is the wedge`, `Y is a defensible primitive`, `X will remain the center of gravity`, or `Y matters more than Z`.
     - Forbid prescriptive verbs and categorical labels in `Strategic Bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, or `first-class`.
+    - Avoid comparative durability claims in `Strategic Bets` such as `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
     - If a would-be strategic bet cannot be phrased as a source-visible signal, convert it into an `Open Questions` bullet or omit it.
     - Require recently emerging or transitional surfaces to be qualified explicitly rather than flattened as fully settled.
     - Require `Open Questions` bullets to remain actual unresolved questions rather than disguised conclusions.

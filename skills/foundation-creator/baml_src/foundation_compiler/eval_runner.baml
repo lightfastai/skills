@@ -41,6 +41,7 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
     - Use `Public materials suggest...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Do not phrase `strategic_bets` as direct statements of company intent such as `The company appears to be betting on...`.
     - Do not use prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
+    - Do not use comparative durability claims in `strategic_bets`, including `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
     - If a possible bet cannot be stated as a source-visible signal without overclaiming, move it to `open_questions` or omit it.
     - Do not use bare `Bet:` labels or categorical claims like `X is the wedge` or `Y is a defensible primitive`.
     - Keep `strategic_bets` short when evidence is weak.
@@ -85,6 +86,7 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
     - Do not use direct company-intent phrasing such as `The company appears to be betting on...`.
     - Do not use bare `Bet:` labels or categorical statements like `X is the wedge`, `Y is a defensible primitive`, `X will remain the center of gravity`, or `Y matters more than Z`.
     - Do not use prescriptive verbs or categorical labels like `prioritize`, `invest in`, `ship`, `treat as first-class`, or `first-class` in `Strategic Bets`.
+    - Do not use comparative durability claims in `Strategic Bets`, including `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
     - If a would-be strategic bet cannot be phrased as a source-visible signal, convert it into an `Open Questions` bullet or omit it.
     - When a surface is visible but still evolving in the packet, qualify it explicitly as emerging, evolving, or unsettled.
     - Write `Open Questions` as actual unresolved questions, typically ending with `?`.
@@ -128,6 +130,7 @@ function EvaluateFoundationDocument(
     - Reward preservation of uncertainty when the source packet is genuinely mixed.
     - Penalize invented certainty, invented capabilities, or implementation leakage.
     - If `existing_foundation` is present, penalize rewriting unchanged content or adding broad new material outside the requested edit.
+    - In update mode, do not penalize exactly one added `Open Questions` bullet when the task explicitly asks to restore or add an open question; penalize only unrelated new questions or extra questions beyond the requested one.
     - Penalize unsupported business-model, monetization, KPI, org, partnership, or operating-plan language.
     - Penalize consulting-style sections such as `Success Signals`, `Metrics`, `Decision Agenda`, `Next Steps`, `Operating Guidance`, or similar drift.
     - Penalize missing markdown heading structure if the document drifts from the required template shape.
