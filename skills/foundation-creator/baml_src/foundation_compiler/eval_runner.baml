@@ -41,7 +41,7 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
     - Do not infer monetization, metrics, org structure, GTM strategy, or operating plans unless the packet explicitly supports them.
     - If `strategic_bets` are included, phrase them as source-visible directional signals or evidence.
     - Each `strategic_bets` item must begin with an evidence-matched source-centered opening.
-    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
+    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, `The source material suggests...`, or `The source material indicates...`.
     - For public-source packets, use `Public materials suggest...`, `Public materials indicate...`, or `Public materials emphasize...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Do not phrase `strategic_bets` as direct statements of company intent such as `The company appears to be betting on...`.
     - Do not use prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
@@ -86,7 +86,7 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
     - If `Strategic Bets` is weakly supported, keep it short rather than expanding it.
     - Phrase `Strategic Bets` as source-visible directional signals, not recommendations or settled future state.
     - Each `Strategic Bets` bullet must begin with an evidence-matched source-centered opening.
-    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, or `The source material indicates...`.
+    - For note-only packets, use `The notes suggest...`, `There are visible signals that...`, `The source material suggests...`, or `The source material indicates...`.
     - For public-source packets, use `Public materials suggest...`, `Public materials indicate...`, or `Public materials emphasize...` only when the packet explicitly cites public docs, press releases, or other external sources.
     - Do not use direct company-intent phrasing such as `The company appears to be betting on...`.
     - Do not use bare `Bet:` labels or categorical statements like `X is the wedge`, `Y is a defensible primitive`, `X will remain the center of gravity`, or `Y matters more than Z`.

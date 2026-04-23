@@ -75,7 +75,7 @@ function strategicBetUsesApprovedLead(line, { allowPublicMaterialsLead = true } 
     : "";
 
   return new RegExp(
-    `^(The notes suggest(?:\\s+a bet on|\\s+that)?|There are visible signals that${publicLeadPattern}|The source material (?:indicates|emphasizes)(?:\\s+a bet on|\\s+that)?)`,
+    `^(The notes suggest(?:\\s+a bet on|\\s+that)?|There are visible signals that${publicLeadPattern}|The source material (?:suggests|indicates|emphasizes)(?:\\s+a bet on|\\s+that)?)`,
     "i",
   ).test(line);
 }
@@ -221,8 +221,8 @@ export function validateFoundationDocument(candidateDocument, templateText, _lan
       hedgedStrategicBets
         ? "Strategic Bets use approved source-centered lead phrasing."
         : allowPublicMaterialsLead
-          ? "One or more Strategic Bets bullets do not begin with approved source-centered phrasing such as `The notes suggest...`, `There are visible signals that...`, `Public materials suggest...`, `Public materials indicate...`, `The source material indicates...`, or `The source material emphasizes...`."
-          : "One or more Strategic Bets bullets use evidence-source phrasing that does not match a notes-only packet. In note-only packets, use `The notes suggest...`, `There are visible signals that...`, `The source material indicates...`, or `The source material emphasizes...`.",
+          ? "One or more Strategic Bets bullets do not begin with approved source-centered phrasing such as `The notes suggest...`, `There are visible signals that...`, `Public materials suggest...`, `Public materials indicate...`, `The source material suggests...`, or `The source material indicates...`."
+          : "One or more Strategic Bets bullets use evidence-source phrasing that does not match a notes-only packet. In note-only packets, use `The notes suggest...`, `There are visible signals that...`, `The source material suggests...`, `The source material indicates...`, or `The source material emphasizes...`.",
     ),
     createCheck(
       "strategic_bets_avoid_prescriptive_or_company_intent_language",
