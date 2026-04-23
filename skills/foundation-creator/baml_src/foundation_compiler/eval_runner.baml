@@ -29,6 +29,8 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
       - if a boundary, actor, surface, strategic bet, or open question is not explicitly targeted by the task prompt, keep its wording unchanged in the brief
       - do not rewrite or replace an existing open question unless the task prompt explicitly targets that exact question
       - if the task prompt asks for a new or replacement open question, preserve all other existing open-question bullets exactly and add or replace only the targeted question
+      - in `unresolved_questions`, copy every existing open-question bullet that is not explicitly replaced by the task prompt, in the original order
+      - when adding a requested new open question, append it after preserved existing questions unless the task prompt explicitly says to replace a specific old question
       - when a line is unchanged, copy its text verbatim from `existing_foundation` instead of normalizing nouns or labels
       - do not rewrite unchanged `company`, `product`, `primitive`, or actor labels into nearby synonyms
       - if the task prompt gives target phrasing for a local rewrite, preserve those anchor words in the rewritten field instead of loosening them into synonyms
@@ -46,6 +48,7 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
     - Do not use bare `Bet:` labels or categorical claims like `X is the wedge` or `Y is a defensible primitive`.
     - Keep `strategic_bets` short when evidence is weak.
     - Keep unresolved questions as actual unresolved questions rather than quietly resolving them in the summary.
+    - Write every `unresolved_questions` item as a direct question ending in `?`, not as a declarative uncertainty statement starting with `Whether...`.
     - Prefer omission over speculation.
 
     {{ ctx.output_format }}
@@ -89,7 +92,8 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
     - Do not use comparative durability claims in `Strategic Bets`, including `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
     - If a would-be strategic bet cannot be phrased as a source-visible signal, convert it into an `Open Questions` bullet or omit it.
     - When a surface is visible but still evolving in the packet, qualify it explicitly as emerging, evolving, or unsettled.
-    - Write `Open Questions` as actual unresolved questions, typically ending with `?`.
+    - Write every `Open Questions` bullet as a direct unresolved question ending in `?`.
+    - Do not write `Open Questions` as disguised conclusions or declarative uncertainty statements starting with `Whether...`.
     - Do not use market-leadership or competitive-superiority language unless the packet explicitly supports it.
     - If `existing_foundation` is present, treat this as update mode:
       - start from `existing_foundation`
@@ -97,6 +101,8 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
       - preserve unchanged bullet wording and unchanged open questions exactly as written
       - do not rewrite or replace existing open questions unless `update_request` explicitly targets that exact question
       - when adding or replacing an open question, keep every other existing open-question bullet in its original order and wording
+      - never omit an existing `Open Questions` bullet unless `update_request` explicitly says to remove or replace that exact question
+      - append a requested new open question after preserved existing open questions unless `update_request` explicitly gives a different placement
       - apply only the edits implied by `update_request`
       - do not rewrite existing paragraphs or bullets unless the request requires it
       - do not add new sections or broad new framing unless `update_request` explicitly asks for them

@@ -91,6 +91,7 @@ function CompileFoundationBrief(
     - Forbid prescriptive or categorical phrasing in `strategic_bets`, including `prioritize`, `invest in`, `ship`, `treat as first-class`, `first-class`, `is the wedge`, `is a defensible primitive`, `will remain`, or `matters more than`.
     - Avoid comparative durability claims in `Strategic Bets` such as `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
     - If a possible bet cannot be phrased as a source-visible signal without overclaiming, move it to `open_questions` or omit it.
+    - Write every `unresolved_questions` item as a direct question ending in `?`, not as a declarative uncertainty statement starting with `Whether...`.
     - If a surface is visible but still in transition, preserve that qualification in the surrounding summary or questions.
     - Avoid market-leadership or competitive-superiority language unless directly supported by source material.
 
@@ -120,6 +121,8 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - In update mode, tell the writer to copy every unchanged bullet and question verbatim instead of paraphrasing it.
     - In update mode, tell the writer not to rewrite or replace existing open questions unless the update request explicitly targets that exact question.
     - In update mode, if the request asks for a new or replacement open question, preserve all other existing open-question bullets exactly and add or replace only the targeted question.
+    - In update mode, tell the writer never to omit an existing open question unless the update request explicitly says to remove or replace that exact question.
+    - In update mode, tell the writer to append a requested new open question after preserved existing questions unless the update request explicitly gives a different placement.
     - In update mode, do not normalize nouns or labels inside unchanged lines; if an unchanged question says `company`, keep `company` rather than rewriting it as `project`, `product`, or `primitive`.
     - In update mode, when the edit request supplies target phrasing for a local rewrite, preserve those anchor words rather than substituting looser synonyms.
     - For example, if the request says `easiest first wedge because eval loops are tighter`, keep both `easiest first wedge` and `eval loops are tighter` explicit in the revised line.
@@ -144,12 +147,14 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Avoid comparative durability claims in `Strategic Bets` such as `more durable than raw prompts` or `will outlast raw prompts`. Prefer source-bound wording like `The source material emphasizes formal constraints and reusable artifacts as durable surfaces relative to raw prompts and transcripts.`
     - If a would-be strategic bet cannot be phrased as a source-visible signal, convert it into an `Open Questions` bullet or omit it.
     - Require recently emerging or transitional surfaces to be qualified explicitly rather than flattened as fully settled.
-    - Require `Open Questions` bullets to remain actual unresolved questions rather than disguised conclusions.
+    - Require every `Open Questions` bullet to be a direct question ending in `?`, not a disguised conclusion or declarative uncertainty statement starting with `Whether...`.
     - Forbid market-leadership or superiority claims unless they are explicit in the brief.
     - In update mode, do not add new sections or broad new framing unless the request explicitly asks for them.
     - In update mode, if a boundary, actor, surface, strategic bet, or open question is not part of the requested edit, preserve its wording exactly.
     - In update mode, do not rewrite an existing open question into a nearby broader or narrower variant just because it overlaps with the requested edit. Keep non-targeted questions byte-for-byte except for markdown context required by the edit.
     - In update mode, when adding or replacing an open question, keep the rest of the `Open Questions` list in its original order and wording.
+    - In update mode, never omit an existing `Open Questions` bullet unless the request explicitly says to remove or replace that exact question.
+    - In update mode, append a requested new open question after preserved existing open questions unless the request explicitly gives a different placement.
     - In update mode, preserve unchanged nouns and subject labels inside copied lines exactly as written.
     - In update mode, if the request gives a specific comparative or causal formulation, keep that formulation explicit instead of paraphrasing it away.
     - In update mode, if the request says `coding workflows are the easiest first wedge because eval loops are tighter`, keep `coding workflows` as the subject anywhere that wedge claim is restated. Do not rewrite it as `skills` or `skills surface`.
