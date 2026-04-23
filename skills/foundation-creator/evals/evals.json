@@ -1,5 +1,6 @@
 {
   "skill_name": "foundation-creator",
+  "capability_id": "foundation-doc",
   "runner_contract": {
     "type": "baml_pipeline",
     "packet_type": "FoundationEvalPacket",
@@ -17,6 +18,7 @@
     {
       "id": 0,
       "eval_name": "create-foundation-from-vercel-source-packet",
+      "smoke": true,
       "scenario_type": "source_packet_transition",
       "input_shape": "source_packet",
       "ambiguity_level": "high",
@@ -162,6 +164,7 @@
     {
       "id": 5,
       "eval_name": "update-lightfast-foundation-tighten-overreach",
+      "smoke": true,
       "scenario_type": "update_existing_doc",
       "input_shape": "existing_doc_update",
       "ambiguity_level": "medium",

@@ -1,6 +1,7 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveCandidateDocumentPath } from "./evals/artifacts.ts";
 import {
   ensureFreshClient,
   importGeneratedClient,
@@ -11,14 +12,16 @@ import {
   getEvalEntriesBySelector,
   loadEvalManifest,
 } from "./evals/manifest.ts";
+import { getGitMetadata } from "./evals/git.ts";
 import { normalizeCompiledBriefForRender } from "./evals/normalization.ts";
 import { getEvalProfilePreset } from "./evals/profiles.ts";
+import { createReporterSet } from "./evals/reporters.ts";
 import {
   buildBenchmark,
   buildComparisonReport,
   buildSuiteSummary,
 } from "./evals/reports.ts";
-import { fail } from "./evals/runtime.ts";
+import { fail, loadText } from "./evals/runtime.ts";
 import { worstStatus } from "./evals/status.ts";
 import { runDeterministicChecks } from "./evals/validators/index.ts";
 import {
@@ -32,15 +35,6 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
-
-async function writeRunArtifacts(runDir, artifacts) {
-  await mkdir(runDir, { recursive: true });
-  for (const [name, value] of Object.entries(artifacts)) {
-    const filePath = path.join(runDir, name);
-    const content = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-    await writeFile(filePath, content, "utf8");
-  }
-}
 
 async function runSingleTrial({
   evalEntry,
@@ -74,7 +68,7 @@ async function runSingleTrial({
     );
   }
 
-  const timing = {};
+  const timing: Record<string, number> = {};
   const startedAt = Date.now();
 
   const compileStartedAt = Date.now();
@@ -141,12 +135,78 @@ async function runSingleTrial({
   };
 }
 
+function buildTrialArtifacts(trialResult) {
+  return {
+    "packet.json": trialResult.packet,
+    "brief.json": trialResult.brief,
+    "candidate.md": trialResult.candidateDocument,
+    "report.json": trialResult.report,
+    "deterministic_checks.json": trialResult.deterministic_checks,
+    "normalization.json": trialResult.normalization,
+    "timing.json": trialResult.timing,
+    "summary.json": trialResult.summary,
+  };
+}
+
+async function runDeterministicOnlyTrial({
+  candidateDocumentPath,
+  evalEntry,
+  evalsDir,
+  runner,
+  skillRoot,
+  validationContract,
+}) {
+  const startedAt = Date.now();
+  const packet = await buildEvalPacket(evalEntry, evalsDir, runner.packet_type);
+  const candidateDocument = await loadText(candidateDocumentPath);
+
+  const deterministicStartedAt = Date.now();
+  const deterministic_checks = await runDeterministicChecks(
+    skillRoot,
+    validationContract,
+    candidateDocument,
+    packet,
+  );
+
+  const deterministicStatus = deterministic_checks.overall_pass ? "Pass" : "Fail";
+  const timing = {
+    compile_ms: 0,
+    render_ms: 0,
+    deterministic_ms: Date.now() - deterministicStartedAt,
+    evaluate_ms: 0,
+    total_ms: Date.now() - startedAt,
+  };
+
+  return {
+    packet,
+    brief: null,
+    candidateDocument,
+    report: {
+      judge_skipped: true,
+      overall_status: deterministicStatus,
+      summary:
+        "LLM judge skipped because this run used --deterministic-only against an existing candidate.md artifact.",
+    },
+    deterministic_checks,
+    normalization: null,
+    timing,
+    summary: {
+      llm_status: deterministicStatus,
+      combined_status: deterministicStatus,
+      deterministic_pass: deterministic_checks.overall_pass,
+      judge_skipped: true,
+    },
+  };
+}
+
 async function runVariantTrials({
   artifactDir,
   candidateGenerated,
+  capabilityId,
   evalEntry,
   evalsDir,
   judgeGenerated,
+  reporters,
   runner,
   skillName,
   skillRoot,
@@ -169,31 +229,28 @@ async function runVariantTrials({
     });
     trialResults.push(trialResult);
 
-    const trialArtifacts = {
-      "packet.json": trialResult.packet,
-      "brief.json": trialResult.brief,
-      "candidate.md": trialResult.candidateDocument,
-      "report.json": trialResult.report,
-      "deterministic_checks.json": trialResult.deterministic_checks,
-      "normalization.json": trialResult.normalization,
-      "timing.json": trialResult.timing,
-      "summary.json": trialResult.summary,
-    };
-
-    if (trials === 1) {
-      await writeRunArtifacts(artifactDir, trialArtifacts);
-    } else {
-      await writeRunArtifacts(path.join(artifactDir, `trial-${trialIndex + 1}`), trialArtifacts);
-    }
+    await reporters.onTrialComplete({
+      artifactDir,
+      evalEntry,
+      trialArtifacts: buildTrialArtifacts(trialResult),
+      trialIndex,
+      trialResult,
+      trials,
+      variant,
+    });
   }
 
   const benchmark = {
-    ...buildBenchmark(skillName, evalEntry, trialResults),
+    ...buildBenchmark(skillName, evalEntry, trialResults, capabilityId),
     variant,
   };
 
-  await writeRunArtifacts(artifactDir, {
-    "benchmark.json": benchmark,
+  await reporters.onBenchmarkComplete({
+    artifactDir,
+    benchmark,
+    evalEntry,
+    trialResults,
+    variant,
   });
 
   return {
@@ -202,7 +259,77 @@ async function runVariantTrials({
   };
 }
 
+async function runDeterministicOnlyEntry({
+  candidateSourcePath,
+  capabilityId,
+  evalEntry,
+  evalProfile,
+  evalsDir,
+  manifestValidationContract,
+  reporters,
+  runDir,
+  runner,
+  skillName,
+  skillRoot,
+}) {
+  const validationContract = evalEntry.validation_contract ?? manifestValidationContract ?? null;
+  const variant = parseVariantSpec("current");
+  const candidateDocumentPath = await resolveCandidateDocumentPath(
+    candidateSourcePath,
+    evalEntry.eval_name,
+  );
+  const trialResult = await runDeterministicOnlyTrial({
+    candidateDocumentPath,
+    evalEntry,
+    evalsDir,
+    runner,
+    skillRoot,
+    validationContract,
+  });
+
+  await reporters.onTrialComplete({
+    artifactDir: runDir,
+    evalEntry,
+    trialArtifacts: {
+      ...buildTrialArtifacts(trialResult),
+      "source_candidate_path.txt": candidateDocumentPath,
+    },
+    trialIndex: 0,
+    trialResult,
+    trials: 1,
+    variant,
+  });
+
+  const benchmark = {
+    ...buildBenchmark(skillName, evalEntry, [trialResult], capabilityId),
+    variant,
+    deterministic_only: true,
+    source_candidate_path: candidateDocumentPath,
+  };
+
+  await reporters.onBenchmarkComplete({
+    artifactDir: runDir,
+    benchmark,
+    evalEntry,
+    trialResults: [trialResult],
+    variant,
+  });
+
+  console.log(`Deterministic-only run complete: ${runDir}`);
+  console.log(
+    `Eval profile: ${evalProfile.name} (validators only; model calls skipped)`,
+  );
+  console.log(`Combined status: ${benchmark.benchmark_summary.combined_worst_status}`);
+
+  return {
+    eval_name: evalEntry.eval_name,
+    run_dir: runDir,
+    current_summary: benchmark.benchmark_summary,
+  };
+}
+
 async function runEvalEntry({
+  capabilityId,
   cleanupRoots,
   compareMode,
   evalEntry,
@@ -211,6 +338,7 @@ async function runEvalEntry({
   judgeGenerated,
   judgePrepared,
   manifestValidationContract,
+  reporters,
   runDir,
   runner,
   skillName,
@@ -252,9 +380,11 @@ async function runEvalEntry({
     const variantRun = await runVariantTrials({
       artifactDir,
       candidateGenerated,
+      capabilityId,
       evalEntry,
       evalsDir,
       judgeGenerated,
+      reporters,
       runner,
       skillName,
       skillRoot,
@@ -275,9 +405,18 @@ async function runEvalEntry({
     variantResults[0];
 
   if (compareMode) {
-    const comparison = buildComparisonReport(skillName, evalEntry, variantResults, evalProfile);
-    await writeRunArtifacts(runDir, {
-      "comparison.json": comparison,
+    const comparison = buildComparisonReport(
+      skillName,
+      evalEntry,
+      variantResults,
+      evalProfile,
+      capabilityId,
+    );
+    await reporters.onComparisonComplete({
+      runDir,
+      comparison,
+      evalEntry,
+      variantResults,
     });
 
     console.log(`Run complete: ${runDir}`);
@@ -328,80 +467,136 @@ async function main() {
     compare,
     evalProfile: evalProfileName,
     runAll,
+    runSmoke,
+    deterministicOnlyPath,
+    reporters: reporterNames,
   } = parseArgs(process.argv.slice(2));
 
   if (!skillName) {
     fail(
-      "Usage: bun run ./scripts/run-baml-eval.ts <foundation-creator|spec-creator> [eval-id-or-name] [--all] [--trials N] [--compare previous,profile:no-skill] [--eval-profile fast|gate|prod|cross]",
+      "Usage: bun run ./scripts/run-baml-eval.ts <foundation-creator|spec-creator> [eval-id-or-name] [--all|--smoke] [--trials N] [--compare previous,profile:no-skill] [--eval-profile fast|gate|prod|cross] [--deterministic-only path] [--reporter local,braintrust]",
     );
+  }
+
+  const deterministicOnly = Boolean(deterministicOnlyPath);
+  if (deterministicOnly && compare.length > 0) {
+    fail("--deterministic-only does not support --compare.");
+  }
+  if (deterministicOnly && trials !== 1) {
+    fail("--deterministic-only validates one existing candidate artifact per eval; omit --trials.");
   }
 
   const skillRoot = path.join(repoRoot, "skills", skillName);
   const evalsDir = path.join(skillRoot, "evals");
   const manifest = await loadEvalManifest(evalsDir, skillName);
-  const evalEntries = getEvalEntriesBySelector(manifest.evals, selector, runAll);
-  const variants = buildVariantPlan(compare);
-  const compareMode = compare.length > 0 || variants.length > 1;
+  const capabilityId = manifest.capability_id ?? skillName;
+  const evalEntries = getEvalEntriesBySelector(manifest.evals, selector, runAll, runSmoke);
+  const variants = deterministicOnly ? [parseVariantSpec("current")] : buildVariantPlan(compare);
+  const compareMode = !deterministicOnly && (compare.length > 0 || variants.length > 1);
   const evalProfile = getEvalProfilePreset(evalProfileName);
   const runner = manifest.runner_contract;
   const manifestValidationContract = manifest.validation_contract ?? null;
 
-  if (!process.env.AI_GATEWAY_API_KEY) {
+  if (!deterministicOnly && !process.env.AI_GATEWAY_API_KEY) {
     fail("AI_GATEWAY_API_KEY is required to execute BAML evals.");
   }
 
-  const cleanupRoots = [];
-  const judgePrepared = await materializeVariantSkillRoot(
-    skillName,
-    skillRoot,
-    parseVariantSpec("current"),
-    evalProfile.judgeOverlayProfiles,
-    repoRoot,
-  );
-  if (judgePrepared.cleanupRoot) {
-    cleanupRoots.push(judgePrepared.cleanupRoot);
-  }
-
-  await ensureFreshClient(judgePrepared.skillRoot, repoRoot);
-  const judgeGenerated = await importGeneratedClient(judgePrepared.skillRoot);
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const suiteDir = runAll
-    ? path.join(skillRoot, "evals", "runs", `${timestamp}-suite`)
+  const startedAt = new Date();
+  const startedAtIso = startedAt.toISOString();
+  const timestamp = startedAtIso.replace(/[:.]/g, "-");
+  const git = await getGitMetadata(repoRoot);
+  const runSuite = runAll || runSmoke;
+  const suiteMode = runAll ? "all" : runSmoke ? "smoke" : "single";
+  const suiteDir = runSuite
+    ? path.join(
+        skillRoot,
+        "evals",
+        "runs",
+        `${timestamp}-${runSmoke ? "smoke" : "suite"}`,
+      )
     : null;
+  const reporters = await createReporterSet(reporterNames, {
+    skillName,
+    capabilityId,
+    evalProfile,
+    timestamp,
+    startedAtIso,
+    suiteMode,
+    runSuite,
+    runSmoke,
+    deterministicOnly,
+    compareMode,
+    git,
+  });
+  const cleanupRoots = [];
+
+  let judgePrepared = null;
+  let judgeGenerated = null;
+  if (!deterministicOnly) {
+    judgePrepared = await materializeVariantSkillRoot(
+      skillName,
+      skillRoot,
+      parseVariantSpec("current"),
+      evalProfile.judgeOverlayProfiles,
+      repoRoot,
+    );
+    if (judgePrepared.cleanupRoot) {
+      cleanupRoots.push(judgePrepared.cleanupRoot);
+    }
+
+    await ensureFreshClient(judgePrepared.skillRoot, repoRoot);
+    judgeGenerated = await importGeneratedClient(judgePrepared.skillRoot);
+  }
 
   try {
     const suiteResults = [];
 
     for (const [index, evalEntry] of evalEntries.entries()) {
-      if (runAll) {
+      if (runSuite) {
         console.log(`\n=== ${index + 1}/${evalEntries.length}: ${evalEntry.eval_name} ===`);
       }
 
-      const runDir = runAll
+      const runDir = runSuite
         ? path.join(suiteDir, evalEntry.eval_name)
         : path.join(skillRoot, "evals", "runs", `${timestamp}-${evalEntry.eval_name}`);
 
       try {
-        const evalResult = await runEvalEntry({
-          cleanupRoots,
-          compareMode,
-          evalEntry,
-          evalProfile,
-          evalsDir,
-          judgeGenerated,
-          judgePrepared,
-          manifestValidationContract,
-          runDir,
-          runner,
-          skillName,
-          skillRoot,
-          trials,
-          variants,
-        });
+        const evalResult = deterministicOnly
+          ? await runDeterministicOnlyEntry({
+              candidateSourcePath: deterministicOnlyPath,
+              capabilityId,
+              evalEntry,
+              evalProfile,
+              evalsDir,
+              manifestValidationContract,
+              reporters,
+              runDir,
+              runner,
+              skillName,
+              skillRoot,
+            })
+          : await runEvalEntry({
+              capabilityId,
+              cleanupRoots,
+              compareMode,
+              evalEntry,
+              evalProfile,
+              evalsDir,
+              judgeGenerated,
+              judgePrepared,
+              manifestValidationContract,
+              reporters,
+              runDir,
+              runner,
+              skillName,
+              skillRoot,
+              trials,
+              variants,
+            });
 
         suiteResults.push(evalResult);
       } catch (error) {
-        if (!runAll) {
+        if (!runSuite) {
           throw error;
         }
 
@@ -409,8 +604,9 @@ async function main() {
         console.error(`Eval failed: ${evalEntry.eval_name}`);
         console.error(message);
 
-        await writeRunArtifacts(runDir, {
-          "error.json": {
+        await reporters.onError({
+          runDir,
+          errorArtifact: {
             eval_name: evalEntry.eval_name,
             message,
           },
@@ -429,18 +625,22 @@ async function main() {
       }
     }
 
-    if (runAll) {
+    if (runSuite) {
       const suiteSummary = buildSuiteSummary({
         skillName,
+        capabilityId,
         evalProfile,
         trials,
         compareMode,
+        deterministicOnly,
+        suiteMode,
         suiteResults,
         suiteDir,
       });
 
-      await writeRunArtifacts(suiteDir, {
-        "suite.json": suiteSummary,
+      await reporters.onSuiteComplete({
+        suiteDir,
+        suiteSummary,
       });
 
       console.log(`\nSuite complete: ${suiteDir}`);
@@ -452,9 +652,13 @@ async function main() {
       }
     }
   } finally {
-    await Promise.all(
-      cleanupRoots.map((cleanupRoot) => rm(cleanupRoot, { recursive: true, force: true })),
-    );
+    try {
+      await reporters.close();
+    } finally {
+      await Promise.all(
+        cleanupRoots.map((cleanupRoot) => rm(cleanupRoot, { recursive: true, force: true })),
+      );
+    }
   }
 }
 

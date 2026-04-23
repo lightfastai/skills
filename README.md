@@ -27,11 +27,14 @@ This repo now includes BAML-backed fixture evals for `foundation-creator` and
 
 ```bash
 bun install
+bun run eval:typecheck
 bun run eval:foundation -- create-foundation-from-vercel-source-packet
 bun run eval:foundation -- create-foundation-from-lightfast-founder-notes
 bun run eval:foundation -- update-lightfast-foundation-boundary-surface-question
 bun run eval:foundation -- update-lightfast-foundation-tighten-overreach
 bun run eval:spec -- create-from-vercel-mcp-source-packet
+bun run eval:foundation:smoke
+bun run eval:spec:smoke
 bun run eval:spec -- --all
 bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator create-foundation-from-cloudflare-source-packet --eval-profile gate --trials 3
 bun run with-env -- bun ./scripts/run-baml-eval.ts foundation-creator update-lightfast-foundation-tighten-overreach --eval-profile fast --compare previous,profile:no-skill
@@ -75,6 +78,19 @@ manifest and writes a suite directory under `skills/<skill>/evals/runs/` with:
 Suite mode exits nonzero if any eval has a non-`Pass` combined status, making it
 suitable for CI gates.
 
+When `--smoke` is used, the runner executes only manifest entries marked with
+`"smoke": true`. The package scripts `eval:foundation:smoke` and
+`eval:spec:smoke` are the intended lightweight CI commands.
+
+When `--deterministic-only <path>` is used, the runner validates an existing
+`candidate.md` artifact against deterministic reference checks without calling
+the candidate model or LLM judge. The path can point to a `candidate.md`, a run
+directory, or a suite directory:
+
+```bash
+bun run eval:spec -- update-add-single-nongoal-preserve-system-overview --deterministic-only skills/spec-creator/evals/runs/<run>/candidate.md
+```
+
 Current comparison variants:
 
 - `current` — working tree prompt stack
@@ -97,6 +113,35 @@ override that default so the tuning loop can stay on cheaper candidate models.
 Model profiles are applied as overlay fixtures, so prompt comparisons against
 `previous` or `profile:no-skill` stay on the same candidate/judge model split.
 The `cross` profile requires Anthropic model access through Vercel AI Gateway.
+
+Local JSON artifacts remain the source of truth. Optional Braintrust export can
+be enabled with:
+
+```bash
+bun run eval:spec -- create-from-vercel-mcp-source-packet --reporter local,braintrust
+```
+
+Braintrust export requires `BRAINTRUST_API_KEY`. The default project is
+`lightfast-skills`, which can be overridden with `BRAINTRUST_PROJECT`.
+
+Experiment names are generated as:
+
+```text
+<capability-id>.<suite-mode>.<profile>.<run-kind>.<yyyymmdd-HHMM>.<git-sha>
+```
+
+Examples:
+
+```text
+foundation-doc.smoke.fast.model.20260423-0423.6cbdaa4
+service-spec.smoke.fast.deterministic.20260423-0422.6cbdaa4
+service-spec.compare.gate.model.20260423-0530.6cbdaa4
+```
+
+Use stable `capability_id` values in manifests instead of relying on mutable
+skill package names. Current values are `foundation-doc` and `service-spec`.
+Optional Braintrust environment variables are `BRAINTRUST_EXPERIMENT` for
+manual curated runs and `BRAINTRUST_ORG` for org selection.
 
 Eval manifests also carry lightweight taxonomy metadata
 (`scenario_type`, `input_shape`, `ambiguity_level`, `domain_profile`,

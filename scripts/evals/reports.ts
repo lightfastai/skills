@@ -3,7 +3,7 @@ import { extractEvalMetadata } from "./manifest.ts";
 import { summarizeEvalProfile } from "./profiles.ts";
 import { compareStatuses, summarizeNumeric, worstStatus } from "./status.ts";
 
-export function buildBenchmark(skillName, evalEntry, trials) {
+export function buildBenchmark(skillName, evalEntry, trials, capabilityId = skillName) {
   const judgeStatuses = trials.map((trial) => trial.report.overall_status);
   const combinedStatuses = trials.map((trial) => trial.summary.combined_status);
   const deterministicPassCount = trials.filter(
@@ -32,6 +32,7 @@ export function buildBenchmark(skillName, evalEntry, trials) {
 
   return {
     skill_name: skillName,
+    capability_id: capabilityId,
     eval_name: evalEntry.eval_name,
     eval_metadata: extractEvalMetadata(evalEntry),
     trial_count: trials.length,
@@ -97,7 +98,13 @@ function compareBenchmarks(left, right) {
   return rightSummary.deterministic_pass_rate - leftSummary.deterministic_pass_rate;
 }
 
-export function buildComparisonReport(skillName, evalEntry, variantResults, evalProfile) {
+export function buildComparisonReport(
+  skillName,
+  evalEntry,
+  variantResults,
+  evalProfile,
+  capabilityId = skillName,
+) {
   const currentVariant = variantResults.find(
     (variantResult) => variantResult.variant.key === "current",
   );
@@ -151,6 +158,7 @@ export function buildComparisonReport(skillName, evalEntry, variantResults, eval
 
   return {
     skill_name: skillName,
+    capability_id: capabilityId,
     eval_name: evalEntry.eval_name,
     trial_count: variantResults[0]?.benchmark.trial_count ?? 0,
     judge_variant: "current",
@@ -172,9 +180,12 @@ export function buildComparisonReport(skillName, evalEntry, variantResults, eval
 
 export function buildSuiteSummary({
   skillName,
+  capabilityId = skillName,
   evalProfile,
   trials,
   compareMode,
+  deterministicOnly,
+  suiteMode,
   suiteResults,
   suiteDir,
 }) {
@@ -184,9 +195,12 @@ export function buildSuiteSummary({
 
   return {
     skill_name: skillName,
+    capability_id: capabilityId,
     eval_profile: summarizeEvalProfile(evalProfile),
+    suite_mode: suiteMode,
     trial_count: trials,
     compare_mode: compareMode,
+    deterministic_only: deterministicOnly,
     eval_count: suiteResults.length,
     pass_count: suiteResults.length - failingResults.length,
     non_pass_count: failingResults.length,

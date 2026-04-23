@@ -1,5 +1,6 @@
 {
   "skill_name": "spec-creator",
+  "capability_id": "service-spec",
   "runner_contract": {
     "type": "baml_pipeline",
     "packet_type": "SpecEvalPacket",
@@ -107,6 +108,7 @@
     {
       "id": 3,
       "eval_name": "create-from-vercel-mcp-source-packet",
+      "smoke": true,
       "scenario_type": "source_packet_transition",
       "input_shape": "source_packet",
       "ambiguity_level": "high",
@@ -129,6 +131,7 @@
     {
       "id": 4,
       "eval_name": "create-from-lightfast-founder-notes-packet",
+      "smoke": true,
       "scenario_type": "founder_notes_ambiguity",
       "input_shape": "source_packet",
       "ambiguity_level": "high",
@@ -151,6 +154,7 @@
     {
       "id": 5,
       "eval_name": "create-from-harbor-care-coordination-packet",
+      "smoke": true,
       "scenario_type": "cross_domain_generalization",
       "input_shape": "source_packet",
       "ambiguity_level": "high",
@@ -348,6 +352,7 @@
     {
       "id": 8,
       "eval_name": "update-add-single-nongoal-preserve-system-overview",
+      "smoke": true,
       "scenario_type": "update_existing_doc",
       "input_shape": "existing_doc_update",
       "ambiguity_level": "low",

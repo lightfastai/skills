@@ -6,12 +6,30 @@ export function parseArgs(argv) {
   let compare = [];
   let evalProfile = "fast";
   let runAll = false;
+  let runSmoke = false;
+  let deterministicOnlyPath = null;
+  let reporters = ["local"];
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
 
     if (arg === "--all") {
       runAll = true;
+      continue;
+    }
+
+    if (arg === "--smoke") {
+      runSmoke = true;
+      continue;
+    }
+
+    if (arg === "--deterministic-only") {
+      const next = argv[index + 1];
+      if (!next) {
+        fail("Missing path after --deterministic-only.");
+      }
+      deterministicOnlyPath = next;
+      index += 1;
       continue;
     }
 
@@ -41,6 +59,22 @@ export function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--reporter") {
+      const next = argv[index + 1];
+      if (!next) {
+        fail("Missing value after --reporter.");
+      }
+      reporters = next
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      if (reporters.length === 0) {
+        fail("--reporter must include at least one reporter name.");
+      }
+      index += 1;
+      continue;
+    }
+
     if (arg === "--eval-profile") {
       const next = argv[index + 1];
       if (!next) {
@@ -64,5 +98,8 @@ export function parseArgs(argv) {
     compare,
     evalProfile,
     runAll,
+    runSmoke,
+    deterministicOnlyPath,
+    reporters,
   };
 }

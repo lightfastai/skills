@@ -18,7 +18,7 @@ export function runCommand(command, args, cwd) {
     child.on("error", reject);
     child.on("exit", (code) => {
       if (code === 0) {
-        resolve();
+        resolve(undefined);
       } else {
         reject(new Error(`${command} ${args.join(" ")} exited with code ${code}`));
       }

@@ -57,7 +57,7 @@ export async function runDeterministicChecks(
       );
       break;
     case "spec-v1":
-      checks = validateSpecDocument(candidateDocument, templateText, languageText);
+      checks = validateSpecDocument(candidateDocument, templateText);
       break;
     case "spec-update-v1":
       checks = validateSpecUpdateDocument(candidateDocument, existingSpecText, validationContract);

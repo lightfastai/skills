@@ -40,12 +40,27 @@ function getEvalBySelector(evals, selector) {
   fail(`Eval '${selector}' not found.`);
 }
 
-export function getEvalEntriesBySelector(evals, selector, runAll) {
-  if (runAll) {
+export function getEvalEntriesBySelector(evals, selector, runAll, runSmoke = false) {
+  if (runAll && runSmoke) {
+    fail("Pass either --all or --smoke, not both.");
+  }
+
+  if (runAll || runSmoke) {
     if (selector) {
-      fail("Pass either --all or an eval id/name, not both.");
+      fail("Pass either a suite flag or an eval id/name, not both.");
     }
+  }
+
+  if (runAll) {
     return evals;
+  }
+
+  if (runSmoke) {
+    const smokeEvals = evals.filter((entry) => entry.smoke === true);
+    if (smokeEvals.length === 0) {
+      fail("No evals are marked with smoke: true in this manifest.");
+    }
+    return smokeEvals;
   }
 
   return [getEvalBySelector(evals, selector)];
@@ -66,7 +81,7 @@ export async function buildEvalPacket(evalEntry, evalsDir, packetType) {
     ? path.join(evalsDir, packetFiles.existing_foundation)
     : null;
 
-  const packet = {
+  const packet: Record<string, unknown> = {
     packet_name: evalEntry.eval_name,
     task_prompt: evalEntry.prompt,
     raw_notes: rawNotesPath ? await loadText(rawNotesPath) : evalEntry.prompt,

@@ -12,6 +12,11 @@ Each eval entry in `skills/*/evals/evals.json` should declare:
 - `ambiguity_level`
 - `domain_profile`
 - `primary_risks`
+- optional `smoke: true` for the small representative CI subset
+
+Each manifest should also declare a stable top-level `capability_id` for
+cross-run reporting. Prefer capability names such as `foundation-doc` or
+`service-spec` over current package names that may be renamed later.
 
 These fields are lightweight metadata. They do not change execution, but they
 show up in `benchmark.json` so runs can be grouped by failure mode later.
@@ -82,5 +87,5 @@ The next missing slices are:
 
 - comparison coverage on more packets so prompt changes are judged by deltas,
   not only by isolated pass/fail runs
-- optional Braintrust-style scorer/export integration if local JSON artifacts are
-  no longer sufficient for experiment tracking
+- richer cross-domain and update-mode packets once the runner/reporting shape
+  has stabilized
