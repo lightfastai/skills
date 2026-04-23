@@ -59,7 +59,8 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
     - Do not split a shared case, shared timeline, or shared record surface into entry-level entities such as `TimelineEntry`, `Event`, or `RecordItem` unless the packet clearly supports those entries as durable first-class records.
     - Most briefs should stay under roughly six entities unless the packet clearly supports richer modeling.
     - Prefer the smallest viable domain model. If an extra entity or field only restates behavior already captured elsewhere, omit it.
-    - If the packet mentions broader `management` or `operations` language only as an unresolved transition, keep that wording in boundaries or unresolved questions rather than turning it into a positive capability, component, or layer name.
+    - If the packet mentions broader `management` or `operations` language only as an unresolved transition, keep that wording in unresolved questions or narrowly qualified tension wording rather than turning it into a positive capability, component, goal, problem, boundary, or layer name.
+    - When write scope is unresolved, avoid phrases like `project and deployment management` outside `unresolved_questions`; prefer neutral source-backed wording such as `project and deployment context`, `deployment inspection`, `retrieval`, `analysis`, or `later documentation wording`.
     - If the packet leaves reminders, outbound follow-up, missing-document requests, or similar communication behavior explicitly unresolved, keep that behavior in boundaries or unresolved questions rather than turning it into a standalone component, layer, or affirmative service capability.
     - If the packet emphasizes durable lineage, versioned history, approval trails, or recurring packet-to-review loops, make the service's long-running coordination role explicit in the brief rather than leaving persistence only implied.
     - When the packet supports it, use the exact phrase `long-running` in `purpose` or `update_request` instead of relying only on weaker proxies like `durable`, `ongoing`, or `history-aware`.
@@ -126,6 +127,7 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
     - When the brief supports it, prefer the exact phrase `long-running` in the `Purpose:` line or opening Problem Statement paragraph instead of leaving that property to inference.
     - If `service_surfaces` include versioned history, a timeline, or an approval trail, mention at least one such surface explicitly in the `Purpose:` line or opening Problem Statement paragraph instead of referring only to generic traceability or lineage.
     - When write scope is unresolved, prefer neutral words like `surface`, `context`, `retrieval`, `inspection`, or `analysis` over stronger nouns like `operations` or `management`.
+    - If the brief includes source-backed but unresolved `management` wording, place the literal `management` phrase only in `## 5. Open Questions` or in explicitly qualified tension language. Do not use it in goals, problem bullets, boundaries, component names, or layer names.
     - Do not use `operation`, `operations`, or `management` in component or layer names when the brief leaves write scope unresolved.
     - Prefer `handling`, `coordination`, or `review` over workflow-forward labels like `routing`, `orchestration`, or `dispatch` unless the brief explicitly supports that language.
     - Include these sections in order:
@@ -166,6 +168,8 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
     - If the brief names an ordered lineage or artifact pipeline, preserve every materially distinct stage somewhere in the document. If the packet or brief includes a stage like `brief` between packet and candidate artifact, keep that stage visible in the Problem Statement, System Overview, or another prose section even if it is not a domain entity.
     - Keep the domain model conservative:
       - include only entities materially supported by the brief
+      - render every entity in `brief.entities` as its own `#### 4.1.x EntityName` heading with its own `Fields:` block; do not merge fields from one entity into another entity
+      - preserve entity names from the brief exactly unless the name itself is malformed
       - prefer fewer entities over speculative completeness
       - use minimal source-backed fields
       - if a concept lacks enough support for a stable entity schema, keep it out of `## 4. Core Domain Model`
@@ -270,6 +274,7 @@ function EvaluateSpecDocument(
     - Penalize umbrella subject fields such as `subject`, `case_subject`, or `party` when they generalize away more concrete packet-backed participant or care-context framing.
     - Penalize splitting a shared case, shared timeline, or shared record surface into entry-level entities when the packet does not clearly establish entry records as first-class objects.
     - Penalize capability-forward wording like `operations` or `management behavior` when the packet leaves write scope explicitly unresolved.
+    - Do not penalize source-backed `management` wording when it appears only inside an open question or explicitly qualified unresolved-tension sentence. Penalize it when it is used as an affirmative goal, capability, component name, layer name, or settled boundary.
     - Penalize standalone reminder, outbound follow-up, or missing-document components when the packet leaves that communication boundary explicitly unresolved.
     - Penalize component or abstraction-layer names that turn unresolved `management` language into affirmative service capability labels.
     - Penalize workflow-forward component labels like `routing`, `orchestration`, or `dispatch` when the packet only supports softer review, handling, or coordination language.

@@ -128,6 +128,28 @@ async function createBraintrustReporter(context) {
     },
     tags,
   });
+  let finalizedSummary = null;
+
+  async function finalizeExperiment() {
+    if (finalizedSummary) {
+      return finalizedSummary;
+    }
+
+    await braintrustExperiment.flush();
+    const summary = await braintrustExperiment.summarize();
+    finalizedSummary = {
+      project,
+      experiment,
+      experiment_name: summary.experimentName ?? experiment,
+      experiment_url: summary.experimentUrl ?? null,
+    };
+
+    console.log(
+      `Braintrust experiment: ${finalizedSummary.experiment_url ?? finalizedSummary.experiment_name}`,
+    );
+
+    return finalizedSummary;
+  }
 
   return {
     name: "braintrust",
@@ -177,12 +199,11 @@ async function createBraintrustReporter(context) {
         tags,
       });
     },
+    async onSuiteComplete() {
+      return await finalizeExperiment();
+    },
     async close() {
-      await braintrustExperiment.flush();
-      const summary = await braintrustExperiment.summarize();
-      console.log(
-        `Braintrust experiment: ${summary.experimentUrl ?? summary.experimentName}`,
-      );
+      await finalizeExperiment();
     },
   };
 }
@@ -224,7 +245,33 @@ export async function createReporterSet(names, context) {
       await emit("onComparisonComplete", payload);
     },
     async onSuiteComplete(payload) {
-      await emit("onSuiteComplete", payload);
+      const reporterSummaries = {};
+
+      for (const reporter of reporters.filter((reporter) => reporter.name !== "local")) {
+        if (typeof reporter.onSuiteComplete === "function") {
+          const reporterSummary = await reporter.onSuiteComplete(payload);
+          if (reporterSummary) {
+            reporterSummaries[reporter.name] = reporterSummary;
+          }
+        }
+      }
+
+      const localPayload =
+        Object.keys(reporterSummaries).length > 0
+          ? {
+              ...payload,
+              suiteSummary: {
+                ...payload.suiteSummary,
+                reporters: reporterSummaries,
+              },
+            }
+          : payload;
+
+      for (const reporter of reporters.filter((reporter) => reporter.name === "local")) {
+        if (typeof reporter.onSuiteComplete === "function") {
+          await reporter.onSuiteComplete(localPayload);
+        }
+      }
     },
     async onError(payload) {
       await emit("onError", payload);
