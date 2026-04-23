@@ -20,6 +20,7 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
     - Produce a behavioral service brief suitable for `spec-creator`.
     - Follow the `spec-creator` template and language guide rather than an ad hoc service summary.
     - Treat expected criteria as evaluation guidance, not as license to invent.
+    - Do not copy forbidden-example terms from these rules or expected criteria into the brief just to name non-goals. Terms like token issuance, allowlists, registries, transport mechanics, and storage mechanics should appear only when the packet states them directly; otherwise use broader source-backed wording such as undocumented internals.
     - Preserve unresolved questions explicitly.
     - Preserve packet-named unresolved tensions when they affect scope, actor boundaries, approval boundaries, deployment shape, or operating model.
     - If the packet contains multiple materially distinct unresolved tensions, keep them distinct in `unresolved_questions` instead of collapsing them into one generic question.
@@ -43,7 +44,10 @@ function CompileSpecBriefFromPacket(packet: SpecEvalPacket) -> SpecBrief {
     - If the packet explicitly names a specific human authority as part of the external dependency boundary to keep the runtime honest, preserve that role as a qualified human dependency as well as an `actor`. This should be rare and should apply only to packet-explicit human review, advocate, or approval boundaries, not to general participant lists.
     - Do not list general participant roles such as family caregivers, patients, providers, reviewers, or approvers under `external_dependencies` just because they appear in the packet. Keep those in `actors`, boundaries, or escalation flows unless the packet explicitly frames a narrower human authority as part of the dependency boundary.
     - When the packet mentions approved clients, consent, or endpoint verification, keep that as a source-visible boundary or restriction. Do not turn it into an approval-state object, internal control process, or hidden eligibility system.
+    - Keep approved-client wording as `approved clients` or `approved-client restrictions`. Do not paraphrase it as allowlists, client registration, registry management, eligibility status, or similar internal process language unless the packet states that mechanism.
     - `entities` should model only externally meaningful nouns the service manipulates or exposes. Do not create entities only to complete a plausible schema.
+    - External resources that the service only retrieves, inspects, analyzes, or exposes through an access surface are not automatically service-owned entities. For example, projects, deployments, logs, docs, endpoint metadata, and client applications should stay in surfaces, components, dependencies, or open questions unless the packet clearly defines durable service-specific records for them.
+    - If the packet supports no durable service-specific records, set `entities` to an empty list and explain the absence through components, dependencies, and unresolved questions instead of inventing placeholder entities.
     - Do not model clients, endpoints, documentation search results, approval lists, or ambiguous aliases as entities unless the packet clearly treats them as durable service records with stable fields and behavior.
     - When two labels may describe overlapping context, such as team versus workspace context, keep the ambiguity explicit instead of multiplying entities.
     - Do not add umbrella subject fields such as `subject`, `case_subject`, `party`, or similarly generalized placeholders when the packet already frames participants or care context more concretely. Prefer packet-backed wording or omit the field.
@@ -167,6 +171,8 @@ function RenderSpecDocumentDraft(brief: SpecBrief) -> string {
       - if a concept lacks enough support for a stable entity schema, keep it out of `## 4. Core Domain Model`
       - avoid second-order record types when a smaller set of entities or fields already makes the behavior legible
       - preserve packet-named distinctions somewhere in the document without forcing every named surface into the domain model
+      - external resources that are only retrieved, inspected, analyzed, or exposed through an access surface are not service-owned entities; keep them in surfaces, components, dependencies, or open questions unless the brief defines durable service-specific records for them
+      - if `brief.entities` is empty, render `### 4.1 Entities` followed by a short sentence explaining that the service does not define durable service-specific entities; do not invent entity headings to satisfy the template
       - do not model clients, endpoints, documentation search results, or unresolved aliases as entities unless the brief clearly treats them as durable first-class records
       - do not convert a separate packet-named surface into a nested field on another entity unless the brief clearly supports that nesting
       - when the brief is transitional on write scope, keep component and layer naming neutral rather than capability-forward

@@ -81,7 +81,7 @@ export function validateSpecDocument(candidateDocument, templateText) {
   const hasEntityDefinitions = /^####\s+4\.1\.\d+\s+/m.test(candidateDocument);
   const declaresNoDurableEntities =
     !hasEntityDefinitions &&
-    /\b(?:does not introduce|no)\b[^.\n]*(?:durable|service-owned|first-class)[^.\n]*entities\b/i.test(
+    /\b(?:does not (?:introduce|define|create)|no)\b[^.\n]*(?:durable|service-owned|service-specific|first-class)[^.\n]*entities\b/i.test(
       candidateDocument,
     );
   const domainModelShapeAcceptable = hasFieldFormatting || declaresNoDurableEntities;
