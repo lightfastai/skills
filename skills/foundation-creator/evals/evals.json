@@ -223,7 +223,7 @@
           },
           {
             "id": "human_judgment_thesis_present",
-            "pattern": "structur(?:e|ing) human judgment.*stable(?:,? [a-z-]+)? constraints?(?: and artifacts?)?|stable(?:,? [a-z-]+)? constraints?(?: and artifacts?)?.*structur(?:e|ing) human judgment",
+            "pattern": "structur(?:e|es|ing) human judgment.*stable(?:,? [a-z-]+)? constraints?(?: and (?:[a-z-]+ )?artifacts?)?|stable(?:,? [a-z-]+)? constraints?(?: and (?:[a-z-]+ )?artifacts?)?.*structur(?:e|es|ing) human judgment",
             "flags": "i",
             "details_pass": "Detected the requested thesis language about structuring human judgment through stable constraints.",
             "details_fail": "Did not detect the requested thesis language about structuring human judgment through stable constraints."
