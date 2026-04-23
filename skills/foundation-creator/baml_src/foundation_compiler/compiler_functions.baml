@@ -117,9 +117,12 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - State that the writer is a source-bound synthesizer, not a strategy consultant.
     - If the brief includes `existing_foundation`, treat the task as update mode and preserve the existing document verbatim except for the requested edits.
     - In update mode, tell the writer to copy every unchanged bullet and question verbatim instead of paraphrasing it.
+    - In update mode, tell the writer not to rewrite or replace existing open questions unless the update request explicitly targets that exact question.
+    - In update mode, if the request asks for a new or replacement open question, preserve all other existing open-question bullets exactly and add or replace only the targeted question.
     - In update mode, do not normalize nouns or labels inside unchanged lines; if an unchanged question says `company`, keep `company` rather than rewriting it as `project`, `product`, or `primitive`.
     - In update mode, when the edit request supplies target phrasing for a local rewrite, preserve those anchor words rather than substituting looser synonyms.
     - For example, if the request says `easiest first wedge because eval loops are tighter`, keep both `easiest first wedge` and `eval loops are tighter` explicit in the revised line.
+    - If the request names `coding workflows` as the wedge subject, do not substitute `skills`, `skills surface`, or another artifact label as the wedge subject in thesis or strategic-bet wording.
     - Require markdown output with exactly this heading structure unless the user asks otherwise:
       - `# <Primitive Name> Foundation`
       - `## What This Is`
@@ -143,8 +146,11 @@ function RenderFoundationCreatorPrompt(brief: FoundationBrief) -> string {
     - Forbid market-leadership or superiority claims unless they are explicit in the brief.
     - In update mode, do not add new sections or broad new framing unless the request explicitly asks for them.
     - In update mode, if a boundary, actor, surface, strategic bet, or open question is not part of the requested edit, preserve its wording exactly.
+    - In update mode, do not rewrite an existing open question into a nearby broader or narrower variant just because it overlaps with the requested edit. Keep non-targeted questions byte-for-byte except for markdown context required by the edit.
+    - In update mode, when adding or replacing an open question, keep the rest of the `Open Questions` list in its original order and wording.
     - In update mode, preserve unchanged nouns and subject labels inside copied lines exactly as written.
     - In update mode, if the request gives a specific comparative or causal formulation, keep that formulation explicit instead of paraphrasing it away.
+    - In update mode, if the request says `coding workflows are the easiest first wedge because eval loops are tighter`, keep `coding workflows` as the subject anywhere that wedge claim is restated. Do not rewrite it as `skills` or `skills surface`.
     - Make the prompt directly usable by an agent.
 
     Brief:

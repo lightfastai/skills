@@ -27,10 +27,13 @@ function CompileFoundationBriefFromPacket(packet: FoundationEvalPacket) -> Found
       - extract a narrow `update_request` rather than rewriting the entire document
       - do not resolve existing ambiguity unless the task prompt explicitly asks for it
       - if a boundary, actor, surface, strategic bet, or open question is not explicitly targeted by the task prompt, keep its wording unchanged in the brief
+      - do not rewrite or replace an existing open question unless the task prompt explicitly targets that exact question
+      - if the task prompt asks for a new or replacement open question, preserve all other existing open-question bullets exactly and add or replace only the targeted question
       - when a line is unchanged, copy its text verbatim from `existing_foundation` instead of normalizing nouns or labels
       - do not rewrite unchanged `company`, `product`, `primitive`, or actor labels into nearby synonyms
       - if the task prompt gives target phrasing for a local rewrite, preserve those anchor words in the rewritten field instead of loosening them into synonyms
       - if the task prompt specifies a comparative or causal clause such as `easiest first wedge because eval loops are tighter`, keep that clause explicit
+      - if the task prompt names `coding workflows` as the wedge subject, do not substitute `skills`, `skills surface`, or another artifact label as the wedge subject in thesis or strategic-bet wording
     - Do not infer monetization, metrics, org structure, GTM strategy, or operating plans unless the packet explicitly supports them.
     - If `strategic_bets` are included, phrase them as source-visible directional signals or evidence.
     - Each `strategic_bets` item must begin with an evidence-matched source-centered opening.
@@ -90,12 +93,15 @@ function RenderFoundationDocumentDraft(brief: FoundationBrief) -> string {
       - start from `existing_foundation`
       - preserve all unchanged lines verbatim
       - preserve unchanged bullet wording and unchanged open questions exactly as written
+      - do not rewrite or replace existing open questions unless `update_request` explicitly targets that exact question
+      - when adding or replacing an open question, keep every other existing open-question bullet in its original order and wording
       - apply only the edits implied by `update_request`
       - do not rewrite existing paragraphs or bullets unless the request requires it
       - do not add new sections or broad new framing unless `update_request` explicitly asks for them
       - copy unchanged lines literally, including nouns and subject labels such as `company`, rather than normalizing them into synonyms
       - if `update_request` supplies target phrasing for a local rewrite, preserve those anchor words rather than replacing them with looser synonyms
       - if `update_request` includes a comparative or causal clause such as `easiest first wedge because eval loops are tighter`, keep that clause explicit in the revised line
+      - if `update_request` says `coding workflows are the easiest first wedge because eval loops are tighter`, keep `coding workflows` as the subject anywhere that wedge claim is restated. Do not rewrite it as `skills` or `skills surface`.
 
     Brief:
     {{ brief|format(type="yaml") }}

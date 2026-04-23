@@ -216,7 +216,7 @@
         "required_patterns": [
           {
             "id": "narrower_artifact_layer_framing_present",
-            "pattern": "source-bound.*durable artifact and constraint layer|source-bound.*durable artifacts? and constraints?|durable artifact and constraint layer.*agent(?:-enabled)? work",
+            "pattern": "source-bound.*durable artifact (?:and|or) constraint layer|source-bound.*durable artifacts? (?:and|or) constraints?|durable artifact (?:and|or) constraint layer.*agent(?:-enabled)? work",
             "flags": "i",
             "details_pass": "Detected the narrower durable-artifact/constraint-layer framing in `What This Is`.",
             "details_fail": "Did not detect the requested narrower durable-artifact/constraint-layer framing."
