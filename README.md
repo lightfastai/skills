@@ -7,6 +7,7 @@ Agent skills published by Lightfast. Compatible with [Claude Code](https://docs.
 | Skill | Purpose |
 |---|---|
 | [`foundation-creator`](skills/foundation-creator/) | Draft a top-level foundation document for a product or company primitive: thesis, mission, boundaries, actor model, surfaces, strategic bets, and open questions. |
+| [`lightfast-linear`](skills/lightfast-linear/) | Shape Lightfast MCP work into lightweight Linear projects, milestones, and artifact-shaped issues. |
 | [`spec-creator`](skills/spec-creator/) | Write and update a top-level `SPEC.md` service specification following a strict template and language guide. |
 
 ## Install
@@ -15,6 +16,7 @@ Each skill is a subdirectory under `skills/`. To install one into a project:
 
 ```bash
 npx skills add lightfastai/skills --skill foundation-creator
+npx skills add lightfastai/skills --skill lightfast-linear
 npx skills add lightfastai/skills --skill spec-creator
 ```
 

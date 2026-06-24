@@ -1,0 +1,6 @@
+interface:
+  display_name: "Lightfast Linear"
+  short_description: "Shape Lightfast work into Linear structure"
+  default_prompt: "Use $lightfast-linear to create lightweight Linear projects, milestones, and issues through Lightfast MCP."
+policy:
+  allow_implicit_invocation: false
