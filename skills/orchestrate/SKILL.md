@@ -144,6 +144,37 @@ state is absent.
 If the durable evidence does not establish an ordered dependency frontier, stop
 and report the missing or conflicting evidence instead of choosing.
 
+## Watch and recover active work
+
+Watch active work through native task waits and repository check events. Request
+another wait from the last event cursor instead of repeatedly polling, and watch
+the existing pull request at its recorded head commit. Surface a notification
+only for a lifecycle, blocker, pull-request, check, or verification transition;
+heartbeats and elapsed-time updates are not transitions.
+
+Reconcile the task with live branch and pull-request evidence before deciding
+that work is stale. Elapsed time is never failure evidence. Work is stale only
+when native task control establishes both that the task is unavailable and that
+it cannot resume, while no corresponding branch or pull-request commit progress
+exists.
+
+Recover automatically at most once:
+
+1. On the first explicit failure, resume the original task when native task
+   control permits it. Keep the same task, checkpoint comment, branch, and pull
+   request, and advance the checkpoint to attempt two.
+2. If the original task cannot resume, request exactly one Ask Matt replacement
+   routed to `/implement`. Bind it to the existing checkpoint comment, branch,
+   and pull request; prohibit creating another branch or pull request.
+3. If attempt two fails, update the existing checkpoint to `waiting`, preserve
+   the failure as its blocker, and request human intervention. Do not resume or
+   replace it again.
+
+If live evidence contains multiple implementation branches or competing pull
+requests for the ticket, do not choose between them. Preserve the checkpoint's
+recorded continuity, transition it to `waiting`, and identify the ambiguity as
+the blocker.
+
 ## Ask Matt intent routing
 
 Route every selected unit through Ask Matt. Pass one explicit intent and accept
