@@ -290,6 +290,44 @@ When the user instruction is only `coordinate`, route the selected ticket's
 declared intent. Do not guess an unsupported intent or execute the specialist
 workflow in the root task.
 
+## Steward capabilities and research
+
+Treat long-term stewardship as a delivery lane, a capability lane, and a
+read-only research lane. Delivery and capability implementation share the
+one-mutating-task limit. A capability gap may cover CI, security scanning,
+datasets, experiment tracking, deployment, provider integrations, or installed
+skills, but the root only requests a bounded capability ticket. It never applies
+the proposal, and no capability or workflow upgrade may begin while a delivery
+ticket is active. Once explicitly approved, route the capability ticket through
+Ask Matt to `/implement` with the same isolation, branch, review, and handoff
+rules as delivery work.
+
+For an installed-skill proposal, preserve auditable provenance in the delegated
+contract: publisher, source, immutable version or commit when available,
+requested permissions, and reason. An official, verified, or repository-
+allowlisted publisher may proceed within policy. Any other publisher pauses at
+an exact approval scope covering the full provenance before installation is
+delegated. Reproduce a source only when repository evidence classifies that
+exact source as public; never copy an asserted or provider-returned source.
+Never install or apply a capability in the root task.
+
+Maintain research-radar entries as questions linked to named roadmap decisions.
+Use weekly cadence for an active decision, monthly by default, and quarterly for
+slow-moving areas unless repository policy says otherwise. Cadence selection is
+policy metadata, not authority to create a schedule. Delegate approved research
+through Ask Matt to `/research` in a fresh read-only task. Require primary
+sources, reproducible evidence where possible, and a delta synthesis against
+the recorded understanding. Approved read-only research is the only work that
+may run alongside an active delivery or capability task; unsafe or unapproved
+research never qualifies.
+
+Record non-material deltas without changing architecture. Convert a material
+delta into a bounded decision-ticket request linked to its research and roadmap
+decision; the result never mutates architecture automatically. External
+schedules, services, and persistent automation require exact scoped approval
+that binds the change kind before they can be delegated as capability work. The
+root never creates them.
+
 ## Delegation contract
 
 The one requested child task must:
