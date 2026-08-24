@@ -2,9 +2,11 @@
 """Evaluate one provider-neutral orchestration snapshot."""
 
 import json
+import math
+import re
 import sys
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 CHECKPOINT_FIELDS = {
@@ -38,6 +40,36 @@ REPOSITORY_MUTATING_INTENTS = {
     "architecture",
     "codebase_health",
 }
+APPROVAL_GATES = {
+    "credentials": (
+        "credential access requires explicit approval",
+        "approve the credential purpose and least-privilege access scope",
+    ),
+    "broad_permissions": (
+        "broad permissions require explicit approval",
+        "approve the exact permissions and bounded resources",
+    ),
+    "destructive_action": (
+        "a destructive action requires explicit approval",
+        "approve the exact destructive action and recovery boundary",
+    ),
+    "legal_terms": (
+        "legal terms require explicit human approval",
+        "have an authorized human accept the identified legal terms",
+    ),
+    "billing": (
+        "a billing action requires explicit approval",
+        "approve the exact billing action and spending boundary",
+    ),
+    "unverified_publisher": (
+        "an unverified publisher requires explicit approval",
+        "verify or explicitly approve the publisher and requested capability",
+    ),
+    "material_scope_expansion": (
+        "the requested work materially expands the selected issue",
+        "approve the exact expanded scope and update the selected issue",
+    ),
+}
 
 
 def parse_timestamp(value: Any) -> datetime:
@@ -51,6 +83,179 @@ def parse_timestamp(value: Any) -> datetime:
 
 def is_commit(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def record_blocker(
+    issue: int, gate: str, blocker: str, next_action: str
+) -> Dict[str, Any]:
+    return {
+        "effect": "record-blocker",
+        "issue": issue,
+        "state": "waiting",
+        "gate": gate,
+        "blocker": blocker,
+        "next_action": next_action,
+    }
+
+
+def is_finite_nonnegative_number(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value >= 0
+    return isinstance(value, float) and math.isfinite(value) and value >= 0
+
+
+def json_equal_strict(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(
+            json_equal_strict(left[key], right[key]) for key in left
+        )
+    if isinstance(left, list):
+        return len(left) == len(right) and all(
+            json_equal_strict(left_item, right_item)
+            for left_item, right_item in zip(left, right)
+        )
+    return left == right
+
+
+def is_bounded_scope(value: Any) -> bool:
+    if isinstance(value, dict):
+        return bool(value) and all(
+            isinstance(key, str)
+            and bool(key.strip())
+            and is_bounded_scope(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return bool(value) and all(is_bounded_scope(item) for item in value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return bool(normalized) and normalized not in {"*", "all", "unbounded"}
+    if isinstance(value, bool):
+        return False
+    return is_finite_nonnegative_number(value)
+
+
+def policy_pause(
+    ticket: Dict[str, Any], approvals: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    gates = ticket.get("gates", {})
+    issue = ticket["issue"]
+    if gates.get("ready_for_human") or "ready-for-human" in ticket.get(
+        "labels", []
+    ):
+        return {
+            "reason": "ready-for-human",
+            "effect": record_blocker(
+                issue,
+                "ready-for-human",
+                "ticket is labelled ready-for-human",
+                (
+                    "a human must complete or reclassify the ticket and record "
+                    "the decision"
+                ),
+            ),
+        }
+
+    if "adr_conflict" in gates:
+        decision_id = gates["adr_conflict"]
+        decision_number = (
+            re.search(r"(?:^ADR-|/)(\d{4})(?:[-.]|$)", decision_id, re.IGNORECASE)
+            if isinstance(decision_id, str)
+            else None
+        )
+        safe_id = (
+            f"ADR-{decision_number.group(1)}"
+            if decision_number is not None
+            else "the applicable ADR"
+        )
+        return {
+            "reason": "adr-conflict",
+            "effect": record_blocker(
+                issue,
+                "adr",
+                f"selected work conflicts with {safe_id}",
+                f"approve a revision or exception to {safe_id} before delegation",
+            ),
+        }
+
+    if "paid_model_run" in gates:
+        paid_run = gates["paid_model_run"]
+        manifest = (
+            paid_run.get("manifest", {}) if isinstance(paid_run, dict) else {}
+        )
+        model_names = manifest.get("models")
+        maxima = [
+            manifest[name]
+            for name in ("max_calls", "max_tokens")
+            if name in manifest
+        ]
+        cost = manifest.get("estimated_cost")
+        bounded = bool(
+            isinstance(model_names, list)
+            and model_names
+            and all(
+                isinstance(model, str) and bool(model.strip())
+                for model in model_names
+            )
+            and maxima
+            and all(
+                isinstance(maximum, int)
+                and not isinstance(maximum, bool)
+                and maximum > 0
+                for maximum in maxima
+            )
+            and isinstance(cost, dict)
+            and is_finite_nonnegative_number(cost.get("amount"))
+            and isinstance(cost.get("currency"), str)
+            and bool(cost["currency"].strip())
+        )
+        approval = approvals.get("paid_model_run", {})
+        if not isinstance(approval, dict):
+            approval = {}
+        approved = bool(
+            bounded
+            and approval.get("approved") is True
+            and json_equal_strict(approval.get("manifest"), manifest)
+        )
+        if not approved:
+            return {
+                "reason": "paid-model-approval-required",
+                "effect": record_blocker(
+                    issue,
+                    "paid-model-run",
+                    "paid model run lacks an approved bounded manifest",
+                    (
+                        "approve a manifest naming models, a maximum call or "
+                        "token limit, and estimated cost"
+                    ),
+                ),
+            }
+
+    for gate, (blocker, next_action) in APPROVAL_GATES.items():
+        if gate not in gates:
+            continue
+        request = gates[gate]
+        requested_scope = request.get("scope") if isinstance(request, dict) else None
+        approval = approvals.get(gate, {})
+        if not isinstance(approval, dict):
+            approval = {}
+        if not (
+            isinstance(requested_scope, dict)
+            and is_bounded_scope(requested_scope)
+            and approval.get("approved") is True
+            and json_equal_strict(approval.get("scope"), requested_scope)
+        ):
+            return {
+                "reason": f"{gate.replace('_', '-')}-approval-required",
+                "effect": record_blocker(
+                    issue, gate.replace("_", "-"), blocker, next_action
+                ),
+            }
+    return None
 
 
 def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
@@ -265,6 +470,50 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         and task.get("resumable") is False
         and not repository_progress
     )
+
+    pause = policy_pause(ticket, snapshot.get("approvals", {}))
+    if pause is not None:
+        observed_at = max(
+            (
+                snapshot.get("observed_at", reconciled["updated_at"]),
+                reconciled["updated_at"],
+            ),
+            key=parse_timestamp,
+        )
+        effect = pause["effect"]
+        reconciled.update(
+            {
+                "state": "waiting",
+                "blocker": effect["blocker"],
+                "next_action": effect["next_action"],
+                "updated_at": observed_at,
+            }
+        )
+        checkpoint_effects = []
+        if reconciled != checkpoint:
+            checkpoint_effects.append(
+                {
+                    "effect": "update-checkpoint",
+                    "comment_id": comment["id"],
+                    "checkpoint": reconciled,
+                }
+            )
+        return {
+            "decision": "wait",
+            "programme": programme["issue"],
+            "ticket": ticket["issue"],
+            "lifecycle_state": "waiting",
+            "checkpoint_comment": comment["id"],
+            "checkpoint": reconciled,
+            "closure_evidence": closure_evidence,
+            "conflicts": conflicts,
+            "notifications": [{"transition": "blocker", "state": "waiting"}],
+            "stale": stale,
+            "delivery_gates": None,
+            "child_merge_authorized": False,
+            "root_mutation_permitted": False,
+            "requested_effects": checkpoint_effects,
+        }
 
     decision = "recover"
     notifications = []
@@ -730,10 +979,12 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
 
     override_issue = snapshot.get("user_instruction", {}).get("override_issue")
     override_ticket = frontier_by_issue.get(override_issue)
-    override_gates = (override_ticket or {}).get("gates", {})
-    override_is_safe = override_ticket is not None and not any(
-        override_gates.get(gate)
-        for gate in ("safety", "approval", "adr_conflict")
+    approvals = snapshot.get("approvals", {})
+    override_is_safe = bool(
+        override_ticket is not None
+        and not override_ticket.get("gates", {}).get("safety")
+        and not override_ticket.get("gates", {}).get("approval")
+        and policy_pause(override_ticket, approvals) is None
     )
     ticket = (
         override_ticket
@@ -742,30 +993,42 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     )
     programme_issue = programme["issue"]
     ticket_issue = ticket["issue"]
+    pause = policy_pause(ticket, approvals)
+    if pause is not None:
+        return {
+            "decision": "stop",
+            "reason": pause["reason"],
+            "selected_ticket": ticket_issue,
+            "root_mutation_permitted": False,
+            "requested_effects": [pause["effect"]],
+        }
     for gate in ("safety", "approval"):
         if ticket.get("gates", {}).get(gate):
+            blocker, next_action = (
+                (
+                    "requested action is blocked by repository safety policy",
+                    (
+                        "remove the unsafe action or approve a policy-compliant "
+                        "alternative"
+                    ),
+                )
+                if gate == "safety"
+                else (
+                    "repository policy requires explicit approval",
+                    "record the exact approval and its bounded scope",
+                )
+            )
             return {
                 "decision": "stop",
                 "reason": f"{gate}-gate",
                 "selected_ticket": ticket_issue,
                 "root_mutation_permitted": False,
-                "requested_effects": [],
+                "requested_effects": [
+                    record_blocker(
+                        ticket_issue, gate, blocker, next_action
+                    )
+                ],
             }
-    if ticket.get("gates", {}).get("adr_conflict"):
-        return {
-            "decision": "stop",
-            "reason": "adr-conflict",
-            "selected_ticket": ticket_issue,
-            "root_mutation_permitted": False,
-            "requested_effects": [
-                {
-                    "effect": "record-blocker",
-                    "issue": ticket_issue,
-                    "state": "waiting",
-                    "gate": "adr",
-                }
-            ],
-        }
     intent = snapshot.get("user_instruction", {}).get("intent", "coordinate")
     routed_intent = (
         ticket.get("intent", "implementation")
