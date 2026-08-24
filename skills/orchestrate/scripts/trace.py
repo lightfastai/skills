@@ -70,6 +70,20 @@ APPROVAL_GATES = {
         "approve the exact expanded scope and update the selected issue",
     ),
 }
+CAPABILITY_CATEGORIES = {
+    "ci",
+    "security_scanning",
+    "datasets",
+    "experiment_tracking",
+    "deployment",
+    "provider_integration",
+    "installed_skill",
+}
+RESEARCH_CADENCES = {
+    "decision_active": "weekly",
+    "default": "monthly",
+    "slow_moving": "quarterly",
+}
 
 
 def parse_timestamp(value: Any) -> datetime:
@@ -96,6 +110,48 @@ def record_blocker(
         "blocker": blocker,
         "next_action": next_action,
     }
+
+
+def capability_delegation(
+    programme_issue: int,
+    issue: int,
+    title: str,
+    **extra: Any,
+) -> Dict[str, Any]:
+    delegation = {
+        "effect": "delegate",
+        "router": "ask-matt",
+        "intent": "implementation",
+        "workflow": "/implement",
+        "lane": "capability",
+        "programme": programme_issue,
+        "issue": issue,
+        "fresh_task": True,
+        "isolated_workspace": True,
+        "task_title": f"[programme #{programme_issue}] {title}",
+        "scope": {"issues": [issue]},
+        "read_before_edit": [
+            "repository-instructions",
+            "domain-vocabulary",
+            "relevant-adrs",
+            "complete-issue",
+        ],
+        "apply_in_root": False,
+        "branch": {"issue_specific": True, "before_edit": True},
+        "implementation_contract": {
+            "tdd": True,
+            "review_axes": [
+                "repository-standards-and-security",
+                "issue-behavior-and-acceptance",
+            ],
+            "commit": True,
+            "open_pull_request": True,
+            "record_blocker_durably": True,
+            "stop_before": ["merge", "ticket-selection"],
+        },
+    }
+    delegation.update(extra)
+    return delegation
 
 
 def is_finite_nonnegative_number(value: Any) -> bool:
@@ -256,6 +312,47 @@ def policy_pause(
                 ),
             }
     return None
+
+
+def delegation_pause(
+    ticket: Dict[str, Any], approvals: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    pause = policy_pause(ticket, approvals)
+    if pause is not None:
+        return pause
+    for gate in ("safety", "approval"):
+        if not ticket.get("gates", {}).get(gate):
+            continue
+        blocker, next_action = (
+            (
+                "requested action is blocked by repository safety policy",
+                "remove the unsafe action or approve a policy-compliant alternative",
+            )
+            if gate == "safety"
+            else (
+                "repository policy requires explicit approval",
+                "record the exact approval and its bounded scope",
+            )
+        )
+        return {
+            "reason": f"{gate}-gate",
+            "effect": record_blocker(
+                ticket["issue"], gate, blocker, next_action
+            ),
+        }
+    return None
+
+
+def stopped_delegation(
+    issue: Optional[int], reason: str, effects: Optional[list] = None
+) -> Dict[str, Any]:
+    return {
+        "decision": "stop",
+        "reason": reason,
+        "selected_ticket": issue,
+        "root_mutation_permitted": False,
+        "requested_effects": effects or [],
+    }
 
 
 def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
@@ -927,6 +1024,15 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "requested_effects": [],
         }
 
+    stewardship = snapshot.get("stewardship", {})
+    requested_research = stewardship.get("research")
+    approvals = snapshot.get("approvals", {})
+    approved_read_only_research = bool(
+        requested_research is not None
+        and requested_research.get("approved") is True
+        and requested_research.get("read_only") is True
+        and delegation_pause(requested_research, approvals) is None
+    )
     active_tasks = [
         task
         for task in snapshot.get("tasks", [])
@@ -938,7 +1044,26 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         if task.get("mutating") is True
         and task.get("lane") in {"delivery", "capability"}
     ]
-    if active_mutating_tasks:
+    if len(active_mutating_tasks) > 1:
+        return stopped_delegation(
+            requested_research.get("issue")
+            if requested_research is not None
+            else None,
+            "multiple-mutating-tasks",
+        )
+    research_request_concurrency_permitted = bool(
+        approved_read_only_research
+        and all(
+            task.get("lane") in {"delivery", "capability"}
+            or (
+                task.get("lane") == "research"
+                and task.get("read_only") is True
+                and task.get("approved") is True
+            )
+            for task in active_tasks
+        )
+    )
+    if active_mutating_tasks and not research_request_concurrency_permitted:
         return {
             "decision": "stop",
             "reason": "active-mutating-task",
@@ -952,13 +1077,370 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         and task.get("approved") is True
         for task in active_tasks
     )
-    if active_tasks and not concurrent_tasks_permitted:
+    if (
+        active_tasks
+        and not concurrent_tasks_permitted
+        and not research_request_concurrency_permitted
+    ):
         return {
             "decision": "stop",
             "reason": "concurrency-not-permitted",
             "selected_ticket": None,
             "root_mutation_permitted": False,
             "requested_effects": [],
+        }
+
+    capability = stewardship.get("capability")
+    if capability is not None:
+        category = capability.get("category")
+        reason = capability.get("reason")
+        if category not in CAPABILITY_CATEGORIES or not (
+            isinstance(reason, str) and reason.strip()
+        ):
+            raise ValueError("invalid bounded capability proposal")
+        provenance = None
+        publisher_trusted = True
+        if category == "installed_skill":
+            installation = capability.get("installation", {})
+            publisher = installation.get("publisher")
+            source = installation.get("source")
+            immutable_version = installation.get(
+                "version", installation.get("commit")
+            )
+            permissions = installation.get("permissions")
+            installation_reason = installation.get("reason")
+            public_sources = snapshot["repository"].get(
+                "public_skill_source_allowlist", []
+            )
+            if not (
+                isinstance(publisher, str)
+                and publisher.strip()
+                and isinstance(source, str)
+                and source.strip()
+                and source in public_sources
+                and (
+                    immutable_version is None
+                    or (
+                        isinstance(immutable_version, str)
+                        and immutable_version.strip()
+                    )
+                )
+                and isinstance(permissions, list)
+                and permissions
+                and all(
+                    isinstance(permission, str) and permission.strip()
+                    for permission in permissions
+                )
+                and isinstance(installation_reason, str)
+                and installation_reason.strip()
+            ):
+                raise ValueError("skill capability requires auditable provenance")
+            provenance = {
+                key: installation[key]
+                for key in (
+                    "publisher",
+                    "source",
+                    "version",
+                    "commit",
+                    "permissions",
+                    "reason",
+                )
+                if key in installation
+            }
+            publisher_scope = {
+                key: provenance[key]
+                for key in (
+                    "publisher",
+                    "source",
+                    "version",
+                    "commit",
+                    "permissions",
+                    "reason",
+                )
+                if key in provenance
+            }
+            allowlist = snapshot["repository"].get(
+                "skill_publisher_allowlist", []
+            )
+            publisher_approval = snapshot.get("approvals", {}).get(
+                "unverified_publisher", {}
+            )
+            publisher_trusted = bool(
+                installation.get("publisher_official") is True
+                or installation.get("publisher_verified") is True
+                or publisher in allowlist
+                or (
+                    isinstance(publisher_approval, dict)
+                    and publisher_approval.get("approved") is True
+                    and json_equal_strict(
+                        publisher_approval.get("scope"), publisher_scope
+                    )
+                )
+            )
+        if stewardship.get("delivery_ticket_active") is True:
+            return {
+                "decision": "stop",
+                "reason": "active-delivery-ticket",
+                "selected_ticket": None,
+                "root_mutation_permitted": False,
+                "requested_effects": [],
+            }
+        if capability.get("approved") is True:
+            issue = capability.get("issue")
+            title = capability.get("title")
+            if not isinstance(issue, int) or not (
+                isinstance(title, str) and title.strip()
+            ):
+                raise ValueError("approved capability requires a ticket")
+            pause = delegation_pause(capability, approvals)
+            if pause is not None:
+                return stopped_delegation(
+                    issue, pause["reason"], [pause["effect"]]
+                )
+            if not snapshot["repository"].get("isolated_workspaces", False):
+                return stopped_delegation(
+                    issue, "isolated-workspace-unavailable"
+                )
+            if not publisher_trusted:
+                return {
+                    "decision": "stop",
+                    "reason": "publisher-approval-required",
+                    "selected_ticket": issue,
+                    "root_mutation_permitted": False,
+                    "requested_effects": [
+                        record_blocker(
+                            issue,
+                            "publisher",
+                            "skill publisher is not verified or allowlisted",
+                            (
+                                "verify or explicitly approve the publisher "
+                                "and bounded skill source"
+                            ),
+                        )
+                    ],
+                }
+            delegation = capability_delegation(
+                programme["issue"],
+                issue,
+                title,
+                **(
+                    {"capability_provenance": provenance}
+                    if provenance is not None
+                    else {}
+                ),
+            )
+            return {
+                "decision": "delegate-capability",
+                "selected_ticket": issue,
+                "root_mutation_permitted": False,
+                "requested_effects": [delegation],
+            }
+        proposal = {
+            "effect": "create-capability-ticket",
+            "programme": programme["issue"],
+            "category": category,
+            "reason": reason,
+            "bounded": True,
+        }
+        if provenance is not None:
+            proposal["capability_provenance"] = provenance
+        return {
+            "decision": "propose-capability",
+            "selected_ticket": None,
+            "root_mutation_permitted": False,
+            "requested_effects": [proposal],
+        }
+
+    research = stewardship.get("research")
+    if research is not None:
+        question = research.get("question")
+        roadmap_decision = research.get("roadmap_decision")
+        cadence_overrides = snapshot["repository"].get(
+            "research_cadences", {}
+        )
+        if not (
+            isinstance(cadence_overrides, dict)
+            and set(cadence_overrides).issubset(RESEARCH_CADENCES)
+            and all(
+                isinstance(cadence, str) and is_bounded_scope(cadence)
+                for cadence in cadence_overrides.values()
+            )
+        ):
+            raise ValueError("invalid research cadence policy")
+        cadences = {**RESEARCH_CADENCES, **cadence_overrides}
+        cadence = cadences.get(research.get("urgency"))
+        if not (
+            isinstance(question, str)
+            and question.strip()
+            and isinstance(roadmap_decision, str)
+            and roadmap_decision.strip()
+            and cadence is not None
+        ):
+            raise ValueError("invalid roadmap-linked research radar entry")
+        if research.get("approved") is not True:
+            return {
+                "decision": "record-research-radar",
+                "selected_ticket": None,
+                "root_mutation_permitted": False,
+                "requested_effects": [
+                    {
+                        "effect": "record-research-radar",
+                        "programme": programme["issue"],
+                        "question": question,
+                        "roadmap_decision": roadmap_decision,
+                        "cadence": cadence,
+                        "create_schedule": False,
+                    }
+                ],
+            }
+        issue = research.get("issue")
+        title = research.get("title")
+        if not (
+            isinstance(issue, int)
+            and isinstance(title, str)
+            and title.strip()
+            and research.get("read_only") is True
+        ):
+            raise ValueError("approved research requires a read-only ticket")
+        pause = delegation_pause(research, approvals)
+        if pause is not None:
+            return stopped_delegation(
+                issue, pause["reason"], [pause["effect"]]
+            )
+        if not snapshot["repository"].get("isolated_workspaces", False):
+            return stopped_delegation(
+                issue, "isolated-workspace-unavailable"
+            )
+        return {
+            "decision": "delegate-research",
+            "selected_ticket": issue,
+            "root_mutation_permitted": False,
+            "requested_effects": [
+                {
+                    "effect": "delegate",
+                    "router": "ask-matt",
+                    "intent": "research",
+                    "workflow": "/research",
+                    "lane": "research",
+                    "programme": programme["issue"],
+                    "issue": issue,
+                    "fresh_task": True,
+                    "isolated_workspace": True,
+                    "read_only": True,
+                    "task_title": f"[programme #{programme['issue']}] {title}",
+                    "scope": {"issues": [issue]},
+                    "research_contract": {
+                        "roadmap_decision": roadmap_decision,
+                        "cadence": cadence,
+                        "sources": "primary",
+                        "reproducible_evidence": "where-possible",
+                        "synthesis": "delta-against-recorded-understanding",
+                    },
+                }
+            ],
+        }
+
+    research_result = stewardship.get("research_result")
+    if research_result is not None:
+        research_issue = research_result.get("research_issue")
+        roadmap_decision = research_result.get("roadmap_decision")
+        delta_synthesis = research_result.get("delta_synthesis")
+        if not (
+            isinstance(research_issue, int)
+            and isinstance(roadmap_decision, str)
+            and roadmap_decision.strip()
+            and isinstance(delta_synthesis, str)
+            and delta_synthesis.strip()
+        ):
+            raise ValueError("invalid research delta synthesis")
+        effect = {
+            "effect": "record-research-delta",
+            "programme": programme["issue"],
+            "research_issue": research_issue,
+            "roadmap_decision": roadmap_decision,
+            "delta_synthesis": delta_synthesis,
+            "mutate_architecture": False,
+        }
+        decision = "record-research-delta"
+        if research_result.get("material") is True:
+            effect["effect"] = "create-decision-ticket"
+            decision = "propose-decision-ticket"
+        return {
+            "decision": decision,
+            "selected_ticket": None,
+            "architecture_mutation_permitted": False,
+            "root_mutation_permitted": False,
+            "requested_effects": [effect],
+        }
+
+    persistent_change = stewardship.get("persistent_change")
+    if persistent_change is not None:
+        issue = persistent_change.get("issue")
+        title = persistent_change.get("title")
+        kind = persistent_change.get("kind")
+        scope = persistent_change.get("scope")
+        if not (
+            isinstance(issue, int)
+            and isinstance(title, str)
+            and title.strip()
+            and kind
+            in {
+                "external_schedule",
+                "external_service",
+                "persistent_automation",
+            }
+            and isinstance(scope, dict)
+            and is_bounded_scope(scope)
+            and scope.get("kind") == kind
+        ):
+            raise ValueError("invalid bounded persistent change")
+        if stewardship.get("delivery_ticket_active") is True:
+            return stopped_delegation(issue, "active-delivery-ticket")
+        pause = delegation_pause(persistent_change, approvals)
+        if pause is not None:
+            return stopped_delegation(
+                issue, pause["reason"], [pause["effect"]]
+            )
+        if not snapshot["repository"].get("isolated_workspaces", False):
+            return stopped_delegation(
+                issue, "isolated-workspace-unavailable"
+            )
+        approval = approvals.get("persistent_change", {})
+        if not (
+            isinstance(approval, dict)
+            and approval.get("approved") is True
+            and json_equal_strict(approval.get("scope"), scope)
+        ):
+            return {
+                "decision": "stop",
+                "reason": "persistent-change-approval-required",
+                "selected_ticket": issue,
+                "root_mutation_permitted": False,
+                "requested_effects": [
+                    record_blocker(
+                        issue,
+                        "persistent-change",
+                        "persistent external change requires explicit approval",
+                        "approve the exact external change and bounded scope",
+                    )
+                ],
+            }
+        return {
+            "decision": "delegate-capability",
+            "selected_ticket": issue,
+            "root_mutation_permitted": False,
+            "requested_effects": [
+                capability_delegation(
+                    programme["issue"],
+                    issue,
+                    title,
+                    persistent_change={
+                        "kind": kind,
+                        "scope": scope,
+                        "approved": True,
+                    },
+                )
+            ],
         }
 
     frontier = [
@@ -979,12 +1461,9 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
 
     override_issue = snapshot.get("user_instruction", {}).get("override_issue")
     override_ticket = frontier_by_issue.get(override_issue)
-    approvals = snapshot.get("approvals", {})
     override_is_safe = bool(
         override_ticket is not None
-        and not override_ticket.get("gates", {}).get("safety")
-        and not override_ticket.get("gates", {}).get("approval")
-        and policy_pause(override_ticket, approvals) is None
+        and delegation_pause(override_ticket, approvals) is None
     )
     ticket = (
         override_ticket
@@ -993,42 +1472,11 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     )
     programme_issue = programme["issue"]
     ticket_issue = ticket["issue"]
-    pause = policy_pause(ticket, approvals)
+    pause = delegation_pause(ticket, approvals)
     if pause is not None:
-        return {
-            "decision": "stop",
-            "reason": pause["reason"],
-            "selected_ticket": ticket_issue,
-            "root_mutation_permitted": False,
-            "requested_effects": [pause["effect"]],
-        }
-    for gate in ("safety", "approval"):
-        if ticket.get("gates", {}).get(gate):
-            blocker, next_action = (
-                (
-                    "requested action is blocked by repository safety policy",
-                    (
-                        "remove the unsafe action or approve a policy-compliant "
-                        "alternative"
-                    ),
-                )
-                if gate == "safety"
-                else (
-                    "repository policy requires explicit approval",
-                    "record the exact approval and its bounded scope",
-                )
-            )
-            return {
-                "decision": "stop",
-                "reason": f"{gate}-gate",
-                "selected_ticket": ticket_issue,
-                "root_mutation_permitted": False,
-                "requested_effects": [
-                    record_blocker(
-                        ticket_issue, gate, blocker, next_action
-                    )
-                ],
-            }
+        return stopped_delegation(
+            ticket_issue, pause["reason"], [pause["effect"]]
+        )
     intent = snapshot.get("user_instruction", {}).get("intent", "coordinate")
     routed_intent = (
         ticket.get("intent", "implementation")

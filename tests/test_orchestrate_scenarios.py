@@ -2000,6 +2000,486 @@ class OrchestrateScenarios(unittest.TestCase):
         self.assertEqual(outcome["requested_effects"], [])
         self.assertFalse(outcome["root_mutation_permitted"])
 
+    def test_capability_gaps_become_bounded_proposals_without_root_implementation(
+        self,
+    ) -> None:
+        categories = (
+            "ci",
+            "security_scanning",
+            "datasets",
+            "experiment_tracking",
+            "deployment",
+            "provider_integration",
+        )
+        for category in categories:
+            with self.subTest(category=category):
+                snapshot = prepared_snapshot(intent="coordinate")
+                snapshot["stewardship"] = {
+                    "capability": {
+                        "category": category,
+                        "reason": "close a roadmap capability gap",
+                        "approved": False,
+                    }
+                }
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["decision"], "propose-capability")
+                self.assertFalse(outcome["root_mutation_permitted"])
+                self.assertEqual(
+                    outcome["requested_effects"],
+                    [
+                        {
+                            "effect": "create-capability-ticket",
+                            "programme": 41,
+                            "category": category,
+                            "reason": "close a roadmap capability gap",
+                            "bounded": True,
+                        }
+                    ],
+                )
+
+    def test_approved_capability_ticket_is_delegated_once_and_never_mid_ticket(
+        self,
+    ) -> None:
+        snapshot = prepared_snapshot(intent="coordinate")
+        snapshot["stewardship"] = {
+            "capability": {
+                "issue": 45,
+                "title": "Add security scanning",
+                "category": "security_scanning",
+                "reason": "protect the release pipeline",
+                "approved": True,
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "delegate-capability")
+        self.assertFalse(outcome["root_mutation_permitted"])
+        delegation = outcome["requested_effects"][0]
+        self.assertEqual(delegation["router"], "ask-matt")
+        self.assertEqual(delegation["workflow"], "/implement")
+        self.assertEqual(delegation["lane"], "capability")
+        self.assertEqual(delegation["scope"], {"issues": [45]})
+        self.assertFalse(delegation["apply_in_root"])
+
+        snapshot["stewardship"]["delivery_ticket_active"] = True
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "active-delivery-ticket")
+        self.assertEqual(stopped["requested_effects"], [])
+
+    def test_skill_capability_records_provenance_and_gates_untrusted_publishers(
+        self,
+    ) -> None:
+        snapshot = prepared_snapshot(intent="coordinate")
+        snapshot["repository"]["skill_publisher_allowlist"] = ["trusted-lab"]
+        snapshot["repository"]["public_skill_source_allowlist"] = [
+            "registry.example/release-skill"
+        ]
+        snapshot["stewardship"] = {
+            "capability": {
+                "issue": 46,
+                "title": "Install release skill",
+                "category": "installed_skill",
+                "reason": "make releases reproducible",
+                "approved": True,
+                "installation": {
+                    "publisher": "trusted-lab",
+                    "source": "registry.example/release-skill",
+                    "version": "sha256:abc123",
+                    "permissions": ["repository:read"],
+                    "reason": "inspect release metadata",
+                    "provider_response": "must-not-be-copied",
+                },
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        delegation = outcome["requested_effects"][0]
+        self.assertEqual(
+            delegation["capability_provenance"],
+            {
+                "publisher": "trusted-lab",
+                "source": "registry.example/release-skill",
+                "version": "sha256:abc123",
+                "permissions": ["repository:read"],
+                "reason": "inspect release metadata",
+            },
+        )
+        self.assertNotIn("must-not-be-copied", json.dumps(outcome))
+        self.assertTrue(delegation["implementation_contract"]["tdd"])
+        self.assertEqual(
+            delegation["implementation_contract"]["stop_before"],
+            ["merge", "ticket-selection"],
+        )
+
+        snapshot["stewardship"]["capability"]["installation"]["publisher"] = (
+            "unknown-publisher"
+        )
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "publisher-approval-required")
+        self.assertEqual(stopped["requested_effects"][0]["gate"], "publisher")
+        self.assertNotIn("registry.example", json.dumps(stopped))
+
+        approved_scope = {
+            "publisher": "unknown-publisher",
+            "source": "registry.example/release-skill",
+            "version": "sha256:abc123",
+            "permissions": ["repository:read"],
+            "reason": "inspect release metadata",
+        }
+        snapshot["approvals"] = {
+            "unverified_publisher": {
+                "approved": True,
+                "scope": approved_scope,
+            }
+        }
+        approved = run_scenario(snapshot)
+
+        self.assertEqual(approved["decision"], "delegate-capability")
+        self.assertEqual(
+            approved["requested_effects"][0]["capability_provenance"][
+                "publisher"
+            ],
+            "unknown-publisher",
+        )
+
+        snapshot["stewardship"]["capability"]["installation"].pop("version")
+        snapshot["stewardship"]["capability"]["installation"]["publisher"] = (
+            "trusted-lab"
+        )
+        without_available_version = run_scenario(snapshot)
+
+        self.assertEqual(without_available_version["decision"], "delegate-capability")
+        self.assertNotIn(
+            "version",
+            without_available_version["requested_effects"][0][
+                "capability_provenance"
+            ],
+        )
+
+        snapshot["stewardship"]["capability"]["approved"] = False
+        proposal = run_scenario(snapshot)
+
+        self.assertEqual(proposal["decision"], "propose-capability")
+        self.assertEqual(
+            proposal["requested_effects"][0]["capability_provenance"],
+            without_available_version["requested_effects"][0][
+                "capability_provenance"
+            ],
+        )
+
+        snapshot["repository"]["public_skill_source_allowlist"] = []
+        unsafe_source = run_invalid_scenario(snapshot)
+
+        self.assertEqual(unsafe_source.returncode, 2)
+        self.assertNotIn("registry.example", unsafe_source.stderr)
+
+    def test_research_radar_links_roadmap_decisions_to_urgency_cadences(
+        self,
+    ) -> None:
+        cadences = {
+            "decision_active": "weekly",
+            "default": "monthly",
+            "slow_moving": "quarterly",
+        }
+        for urgency, cadence in cadences.items():
+            with self.subTest(urgency=urgency):
+                snapshot = prepared_snapshot(intent="coordinate")
+                snapshot["stewardship"] = {
+                    "research": {
+                        "question": "Has the reproducible baseline changed?",
+                        "roadmap_decision": "decision-42-serving-target",
+                        "urgency": urgency,
+                        "approved": False,
+                    }
+                }
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["decision"], "record-research-radar")
+                self.assertFalse(outcome["root_mutation_permitted"])
+                self.assertEqual(
+                    outcome["requested_effects"],
+                    [
+                        {
+                            "effect": "record-research-radar",
+                            "programme": 41,
+                            "question": "Has the reproducible baseline changed?",
+                            "roadmap_decision": "decision-42-serving-target",
+                            "cadence": cadence,
+                            "create_schedule": False,
+                        }
+                    ],
+                )
+
+        snapshot = prepared_snapshot(intent="coordinate")
+        snapshot["repository"]["research_cadences"] = {
+            "decision_active": "biweekly"
+        }
+        snapshot["stewardship"] = {
+            "research": {
+                "question": "Has the reproducible baseline changed?",
+                "roadmap_decision": "decision-42-serving-target",
+                "urgency": "decision_active",
+                "approved": False,
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(
+            outcome["requested_effects"][0]["cadence"], "biweekly"
+        )
+
+    def test_approved_research_is_fresh_read_only_and_may_run_with_delivery(
+        self,
+    ) -> None:
+        snapshot = prepared_snapshot(intent="coordinate")
+        snapshot["tasks"] = [
+            {
+                "id": "delivery-active",
+                "state": "running",
+                "lane": "delivery",
+                "mutating": True,
+            }
+        ]
+        snapshot["stewardship"] = {
+            "research": {
+                "issue": 47,
+                "title": "Recheck serving baseline",
+                "question": "Has the reproducible baseline changed?",
+                "roadmap_decision": "decision-42-serving-target",
+                "urgency": "decision_active",
+                "approved": True,
+                "read_only": True,
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "delegate-research")
+        delegation = outcome["requested_effects"][0]
+        self.assertEqual(delegation["router"], "ask-matt")
+        self.assertEqual(delegation["workflow"], "/research")
+        self.assertTrue(delegation["fresh_task"])
+        self.assertTrue(delegation["read_only"])
+        self.assertEqual(
+            delegation["research_contract"],
+            {
+                "roadmap_decision": "decision-42-serving-target",
+                "cadence": "weekly",
+                "sources": "primary",
+                "reproducible_evidence": "where-possible",
+                "synthesis": "delta-against-recorded-understanding",
+            },
+        )
+        self.assertNotIn("branch", delegation)
+
+        snapshot["stewardship"]["research"]["read_only"] = False
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "active-mutating-task")
+
+        snapshot["stewardship"]["research"]["read_only"] = True
+        snapshot["tasks"] = [
+            {
+                "id": "unsafe-research-active",
+                "state": "running",
+                "lane": "research",
+                "read_only": False,
+                "approved": True,
+            }
+        ]
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "concurrency-not-permitted")
+
+    def test_material_research_delta_creates_decision_ticket_without_architecture_change(
+        self,
+    ) -> None:
+        snapshot = prepared_snapshot(intent="coordinate")
+        snapshot["stewardship"] = {
+            "research_result": {
+                "research_issue": 47,
+                "roadmap_decision": "decision-42-serving-target",
+                "delta_synthesis": "The reproducible baseline moved materially.",
+                "material": True,
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "propose-decision-ticket")
+        self.assertFalse(outcome["architecture_mutation_permitted"])
+        self.assertFalse(outcome["root_mutation_permitted"])
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "create-decision-ticket",
+                    "programme": 41,
+                    "research_issue": 47,
+                    "roadmap_decision": "decision-42-serving-target",
+                    "delta_synthesis": (
+                        "The reproducible baseline moved materially."
+                    ),
+                    "mutate_architecture": False,
+                }
+            ],
+        )
+
+    def test_persistent_external_changes_require_exact_approval_then_delegate(
+        self,
+    ) -> None:
+        for kind in (
+            "external_schedule",
+            "external_service",
+            "persistent_automation",
+        ):
+            with self.subTest(kind=kind):
+                snapshot = prepared_snapshot(intent="coordinate")
+                scope = {"kind": kind, "resource": "research-radar"}
+                snapshot["stewardship"] = {
+                    "persistent_change": {
+                        "issue": 48,
+                        "title": "Automate research radar",
+                        "kind": kind,
+                        "scope": scope,
+                    }
+                }
+
+                stopped = run_scenario(snapshot)
+
+                self.assertEqual(stopped["decision"], "stop")
+                self.assertEqual(
+                    stopped["reason"], "persistent-change-approval-required"
+                )
+                blocker = stopped["requested_effects"][0]
+                self.assertEqual(blocker["effect"], "record-blocker")
+                self.assertEqual(blocker["gate"], "persistent-change")
+
+                snapshot["approvals"] = {
+                    "persistent_change": {
+                        "approved": True,
+                        "scope": scope,
+                    }
+                }
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["decision"], "delegate-capability")
+                delegation = outcome["requested_effects"][0]
+                self.assertEqual(delegation["workflow"], "/implement")
+                self.assertEqual(delegation["lane"], "capability")
+                self.assertEqual(
+                    delegation["persistent_change"],
+                    {"kind": kind, "scope": scope, "approved": True},
+                )
+                self.assertFalse(delegation["apply_in_root"])
+
+                snapshot["stewardship"]["delivery_ticket_active"] = True
+                mid_ticket = run_scenario(snapshot)
+
+                self.assertEqual(mid_ticket["decision"], "stop")
+                self.assertEqual(mid_ticket["reason"], "active-delivery-ticket")
+
+                snapshot["stewardship"].pop("delivery_ticket_active")
+                mismatched_kind = (
+                    "external_service"
+                    if kind != "external_service"
+                    else "external_schedule"
+                )
+                snapshot["stewardship"]["persistent_change"]["scope"] = {
+                    "kind": mismatched_kind,
+                    "resource": "research-radar",
+                }
+                invalid = run_invalid_scenario(snapshot)
+
+                self.assertEqual(invalid.returncode, 2)
+
+    def test_stewardship_delegations_enforce_policy_and_isolation_gates(
+        self,
+    ) -> None:
+        capability = prepared_snapshot(intent="coordinate")
+        capability["repository"]["isolated_workspaces"] = False
+        capability["stewardship"] = {
+            "capability": {
+                "issue": 45,
+                "title": "Add security scanning",
+                "category": "security_scanning",
+                "reason": "protect releases",
+                "approved": True,
+            }
+        }
+
+        stopped = run_scenario(capability)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "isolated-workspace-unavailable")
+
+        research = prepared_snapshot(intent="coordinate")
+        research["stewardship"] = {
+            "research": {
+                "issue": 47,
+                "title": "Recheck baseline",
+                "question": "Did the baseline change?",
+                "roadmap_decision": "decision-42-serving-target",
+                "urgency": "decision_active",
+                "approved": True,
+                "read_only": True,
+                "gates": {"ready_for_human": True},
+            }
+        }
+
+        stopped = run_scenario(research)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "ready-for-human")
+        self.assertEqual(stopped["requested_effects"][0]["gate"], "ready-for-human")
+
+        research["stewardship"]["research"]["gates"] = {}
+        research["repository"]["isolated_workspaces"] = False
+        stopped = run_scenario(research)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "isolated-workspace-unavailable")
+
+    def test_research_exception_does_not_mask_multiple_mutating_tasks(self) -> None:
+        snapshot = prepared_snapshot(intent="coordinate")
+        snapshot["tasks"] = [
+            {
+                "id": f"delivery-{index}",
+                "state": "running",
+                "lane": "delivery",
+                "mutating": True,
+            }
+            for index in (1, 2)
+        ]
+        snapshot["stewardship"] = {
+            "research": {
+                "issue": 47,
+                "title": "Recheck baseline",
+                "question": "Did the baseline change?",
+                "roadmap_decision": "decision-42-serving-target",
+                "urgency": "decision_active",
+                "approved": True,
+                "read_only": True,
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "multiple-mutating-tasks")
+
 
 if __name__ == "__main__":
     unittest.main()
