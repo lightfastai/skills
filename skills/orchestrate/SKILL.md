@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Coordinate or recover the current repository from a read-only root task. Use when a prepared repository has one active programme whose durable tracker and repository evidence must be reconciled before the next action.
+description: Recover and coordinate the current repository from a read-only root task. Use when one active programme must be reconciled, scheduled at its valid dependency frontier, and delegated through Ask Matt.
 ---
 
 # Orchestrate
@@ -96,35 +96,74 @@ state is absent.
 6. When reconciliation changes the checkpoint, request one update to its
    existing comment identifier. Never append a second status comment.
 
-## Trace one ready ticket
+## Schedule the delivery frontier
 
-1. After recovery, establish that there is one ticket whose durable
-   state is `ready` with no open blockers. Do not infer readiness from chat
-   history.
-2. Normalize only the evidence needed by `scripts/trace.py`:
+1. After recovery, list the programme's ready tickets and remove every ticket
+   with an open native dependency. This is the executable dependency frontier;
+   do not replace native dependency evidence with prose or chat history.
+2. Apply the parent-approved sub-issue order to the frontier. The first ordered
+   frontier ticket is the default selection. Stop if the frontier has no ticket
+   in that approved order.
+3. Apply an explicit human override only when its ticket is in the dependency
+   frontier and has no safety, approval, or ADR gate. A rejected override does
+   not erase the default ordered selection.
+4. Stop when any delivery or capability implementation task is active. The
+   sole concurrency exception is an active research task that is both approved
+   and read-only; unapproved or mutating research does not qualify.
+5. Stop the selected ticket at an applicable ADR conflict and request a durable
+   Waiting blocker. Before mutating delegation, require the repository's
+   declared isolated-workspace capability.
+6. Normalize only the evidence needed by `scripts/trace.py`:
 
    ```json
    {
-     "repository": {"coordination_only": true},
-     "programme": {"issue": 41, "state": "active"},
+     "repository": {"coordination_only": true, "isolated_workspaces": true},
+     "programme": {"issue": 41, "state": "active",
+       "approved_order": [42, 43]},
      "tickets": [
-       {"issue": 42, "title": "Add audit log", "state": "ready", "blocked_by": []}
+       {"issue": 42, "title": "Add audit log", "state": "ready",
+         "intent": "implementation", "blocked_by": [], "gates": {}},
+       {"issue": 43, "title": "Document retention", "state": "ready",
+         "intent": "specification", "blocked_by": [40], "gates": {}}
      ],
      "tasks": [],
-     "user_instruction": {"intent": "coordinate"}
+     "user_instruction": {"intent": "coordinate", "override_issue": null}
    }
    ```
 
-   Use `"intent": "implement"` when the user asks the root task to perform the
-   implementation itself.
-3. Pass that JSON on standard input to `scripts/trace.py`. The structured result
+   `blocked_by` contains open native blockers only. `approved_order` is the
+   approved parent/sub-issue order. Use `"intent": "implement"` only when the
+   user asks the root task to implement directly; the root still refuses and
+   delegates.
+7. Pass that JSON on standard input to `scripts/trace.py`. The structured result
    is the observable decision: the selected ticket, whether the root request was
    refused, and the single requested effect.
-4. Present the result as a bounded delegation plan. Do not execute the child
+8. Present the result as a bounded delegation plan. Do not execute the child
    work in the root task.
 
-If the durable evidence does not establish exactly one ready, unblocked ticket,
-stop and report the missing or conflicting evidence instead of choosing.
+If the durable evidence does not establish an ordered dependency frontier, stop
+and report the missing or conflicting evidence instead of choosing.
+
+## Ask Matt intent routing
+
+Route every selected unit through Ask Matt. Pass one explicit intent and accept
+only these specialist results:
+
+| Intent | Specialist workflow |
+| --- | --- |
+| implementation | `/implement` |
+| diagnosis | `/diagnosing-bugs` |
+| research | `/research` |
+| prototype | `/prototype` |
+| architecture | `/grill-with-docs` |
+| wayfinding | `/wayfinder` |
+| codebase health | `/improve-codebase-architecture` |
+| specification | `/to-spec` |
+| ticketing | `/to-tickets` |
+
+When the user instruction is only `coordinate`, route the selected ticket's
+declared intent. Do not guess an unsupported intent or execute the specialist
+workflow in the root task.
 
 ## Delegation contract
 
@@ -139,6 +178,11 @@ The one requested child task must:
 - create an issue-specific branch before any edit; and
 - return its result for independent root verification without merging or
   selecting more work.
+
+For `/implement`, the child contract must also require TDD at the repository's
+approved seam, a two-axis review of repository standards/security and issue
+behavior/acceptance, a commit, one linked pull request, durable blocker
+recording, and a stop before merge or selection of another ticket.
 
 Report the recovered programme, decisive evidence, selected ticket, refusal if
 applicable, and the bounded Ask Matt delegation. Keep operational details

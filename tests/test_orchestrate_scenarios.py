@@ -30,10 +30,17 @@ def run_invalid_scenario(snapshot: dict) -> subprocess.CompletedProcess:
     )
 
 
-def prepared_snapshot(intent: str = "coordinate", programme_state: str = "active") -> dict:
+def prepared_snapshot(intent: str = "implementation", programme_state: str = "active") -> dict:
     return {
-        "repository": {"coordination_only": True},
-        "programme": {"issue": 41, "state": programme_state},
+        "repository": {
+            "coordination_only": True,
+            "isolated_workspaces": True,
+        },
+        "programme": {
+            "issue": 41,
+            "state": programme_state,
+            "approved_order": [42],
+        },
         "tickets": [
             {
                 "issue": 42,
@@ -525,8 +532,257 @@ class OrchestrateScenarios(unittest.TestCase):
         self.assertEqual(delegation["programme"], 41)
         self.assertEqual(delegation["issue"], 42)
         self.assertTrue(delegation["fresh_task"])
+        self.assertTrue(delegation["isolated_workspace"])
+        self.assertEqual(delegation["task_title"], "[programme #41] Add audit log")
         self.assertEqual(delegation["scope"]["issues"], [42])
+        self.assertEqual(
+            delegation["read_before_edit"],
+            [
+                "repository-instructions",
+                "domain-vocabulary",
+                "relevant-adrs",
+                "complete-issue",
+            ],
+        )
+        self.assertEqual(
+            delegation["branch"],
+            {"issue_specific": True, "before_edit": True},
+        )
+        self.assertEqual(
+            delegation["implementation_contract"],
+            {
+                "tdd": True,
+                "review_axes": [
+                    "repository-standards-and-security",
+                    "issue-behavior-and-acceptance",
+                ],
+                "commit": True,
+                "open_pull_request": True,
+                "record_blocker_durably": True,
+                "stop_before": ["merge", "ticket-selection"],
+            },
+        )
         self.assertFalse(outcome["root_mutation_permitted"])
+
+    def test_native_dependency_frontier_uses_approved_order(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["programme"]["approved_order"] = [44, 43, 42]
+        snapshot["tickets"] = [
+            {
+                "issue": 42,
+                "title": "Blocked first ticket",
+                "state": "ready",
+                "blocked_by": [40],
+            },
+            {
+                "issue": 43,
+                "title": "Eligible second ticket",
+                "state": "ready",
+                "blocked_by": [],
+            },
+            {
+                "issue": 44,
+                "title": "Approved first ticket",
+                "state": "ready",
+                "blocked_by": [],
+            },
+        ]
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["selected_ticket"], 44)
+        self.assertEqual(outcome["decisive_evidence"]["dependency_frontier"], [43, 44])
+        self.assertEqual(outcome["decisive_evidence"]["approved_order"], [44, 43, 42])
+
+    def test_safe_human_override_takes_precedence_over_approved_order(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["programme"]["approved_order"] = [42, 43]
+        snapshot["tickets"].append(
+            {
+                "issue": 43,
+                "title": "Explicitly selected ticket",
+                "state": "ready",
+                "blocked_by": [],
+            }
+        )
+        snapshot["user_instruction"]["override_issue"] = 43
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["selected_ticket"], 43)
+        self.assertEqual(outcome["decisive_evidence"]["human_override"], "honored")
+
+    def test_human_override_cannot_bypass_hard_gates(self) -> None:
+        for gate in ("dependency", "safety", "approval", "adr_conflict"):
+            with self.subTest(gate=gate):
+                snapshot = prepared_snapshot()
+                snapshot["programme"]["approved_order"] = [42, 43]
+                overridden = {
+                    "issue": 43,
+                    "title": "Unsafe override",
+                    "state": "ready",
+                    "blocked_by": [40] if gate == "dependency" else [],
+                    "gates": {gate: True} if gate != "dependency" else {},
+                }
+                snapshot["tickets"].append(overridden)
+                snapshot["user_instruction"]["override_issue"] = 43
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["selected_ticket"], 42)
+                self.assertEqual(
+                    outcome["decisive_evidence"]["human_override"],
+                    "rejected",
+                )
+
+    def test_active_mutating_delivery_or_capability_task_blocks_delegation(self) -> None:
+        for lane in ("delivery", "capability"):
+            with self.subTest(lane=lane):
+                snapshot = prepared_snapshot()
+                snapshot["tasks"] = [
+                    {
+                        "id": "task-active",
+                        "state": "running",
+                        "lane": lane,
+                        "mutating": True,
+                    }
+                ]
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["decision"], "stop")
+                self.assertEqual(outcome["reason"], "active-mutating-task")
+                self.assertEqual(outcome["requested_effects"], [])
+
+    def test_only_approved_read_only_research_may_run_concurrently(self) -> None:
+        allowed = prepared_snapshot()
+        allowed["tasks"] = [
+            {
+                "id": "research-approved",
+                "state": "running",
+                "lane": "research",
+                "read_only": True,
+                "approved": True,
+            }
+        ]
+
+        self.assertEqual(run_scenario(allowed)["decision"], "delegate")
+
+        for unsafe_research in (
+            {"read_only": True, "approved": False},
+            {"read_only": False, "approved": True},
+        ):
+            with self.subTest(task=unsafe_research):
+                denied = prepared_snapshot()
+                denied["tasks"] = [
+                    {
+                        "id": "research-unsafe",
+                        "state": "running",
+                        "lane": "research",
+                        **unsafe_research,
+                    }
+                ]
+
+                outcome = run_scenario(denied)
+
+                self.assertEqual(outcome["decision"], "stop")
+                self.assertEqual(outcome["reason"], "concurrency-not-permitted")
+
+    def test_selected_ticket_stops_at_adr_gate_and_records_blocker(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {"adr_conflict": "ADR-0007"}
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "adr-conflict")
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "record-blocker",
+                    "issue": 42,
+                    "state": "waiting",
+                    "gate": "adr",
+                }
+            ],
+        )
+
+    def test_selected_ticket_stops_at_safety_or_approval_gate(self) -> None:
+        for gate in ("safety", "approval"):
+            with self.subTest(gate=gate):
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {gate: True}
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["decision"], "stop")
+                self.assertEqual(outcome["reason"], f"{gate}-gate")
+                self.assertEqual(outcome["requested_effects"], [])
+
+    def test_mutating_delegation_requires_an_isolated_workspace(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["repository"]["isolated_workspaces"] = False
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "isolated-workspace-unavailable")
+        self.assertEqual(outcome["requested_effects"], [])
+
+    def test_other_repository_mutating_workflows_get_isolation_and_branch(self) -> None:
+        for intent in ("prototype", "architecture", "codebase_health"):
+            with self.subTest(intent=intent):
+                unavailable = prepared_snapshot(intent=intent)
+                unavailable["repository"]["isolated_workspaces"] = False
+
+                stopped = run_scenario(unavailable)
+
+                self.assertEqual(stopped["decision"], "stop")
+                self.assertEqual(
+                    stopped["reason"],
+                    "isolated-workspace-unavailable",
+                )
+
+                delegated = run_scenario(prepared_snapshot(intent=intent))[
+                    "requested_effects"
+                ][0]
+                self.assertEqual(
+                    delegated["branch"],
+                    {"issue_specific": True, "before_edit": True},
+                )
+
+    def test_ask_matt_routes_every_approved_intent(self) -> None:
+        routes = {
+            "implementation": "/implement",
+            "diagnosis": "/diagnosing-bugs",
+            "research": "/research",
+            "prototype": "/prototype",
+            "architecture": "/grill-with-docs",
+            "wayfinding": "/wayfinder",
+            "codebase_health": "/improve-codebase-architecture",
+            "specification": "/to-spec",
+            "ticketing": "/to-tickets",
+        }
+
+        for intent, workflow in routes.items():
+            with self.subTest(intent=intent):
+                outcome = run_scenario(prepared_snapshot(intent=intent))
+                delegation = outcome["requested_effects"][0]
+
+                self.assertEqual(delegation["router"], "ask-matt")
+                self.assertEqual(delegation["intent"], intent)
+                self.assertEqual(delegation["workflow"], workflow)
+
+    def test_coordinate_instruction_routes_the_ticket_intent(self) -> None:
+        snapshot = prepared_snapshot(intent="coordinate")
+        snapshot["tickets"][0]["intent"] = "diagnosis"
+
+        outcome = run_scenario(snapshot)
+
+        delegation = outcome["requested_effects"][0]
+        self.assertEqual(delegation["intent"], "diagnosis")
+        self.assertEqual(delegation["workflow"], "/diagnosing-bugs")
 
     def test_direct_implementation_request_is_refused_with_delegated_next_action(
         self,

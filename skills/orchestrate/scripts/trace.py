@@ -21,6 +21,23 @@ CHECKPOINT_FIELDS = {
 }
 CONFLICT_FIELDS = {"task_id", "branch", "pull_request", "verified_commit"}
 LIFECYCLE_STATES = {"ready", "active", "waiting", "done"}
+ASK_MATT_ROUTES = {
+    "implementation": "/implement",
+    "diagnosis": "/diagnosing-bugs",
+    "research": "/research",
+    "prototype": "/prototype",
+    "architecture": "/grill-with-docs",
+    "wayfinding": "/wayfinder",
+    "codebase_health": "/improve-codebase-architecture",
+    "specification": "/to-spec",
+    "ticketing": "/to-tickets",
+}
+REPOSITORY_MUTATING_INTENTS = {
+    "implementation",
+    "prototype",
+    "architecture",
+    "codebase_health",
+}
 
 
 def parse_timestamp(value: Any) -> datetime:
@@ -264,38 +281,171 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "requested_effects": [],
         }
 
-    ready = [
+    active_tasks = [
+        task
+        for task in snapshot.get("tasks", [])
+        if task.get("state") in {"running", "active"}
+    ]
+    active_mutating_tasks = [
+        task
+        for task in active_tasks
+        if task.get("mutating") is True
+        and task.get("lane") in {"delivery", "capability"}
+    ]
+    if active_mutating_tasks:
+        return {
+            "decision": "stop",
+            "reason": "active-mutating-task",
+            "selected_ticket": None,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    concurrent_tasks_permitted = all(
+        task.get("lane") == "research"
+        and task.get("read_only") is True
+        and task.get("approved") is True
+        for task in active_tasks
+    )
+    if active_tasks and not concurrent_tasks_permitted:
+        return {
+            "decision": "stop",
+            "reason": "concurrency-not-permitted",
+            "selected_ticket": None,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    frontier = [
         ticket
         for ticket in snapshot["tickets"]
         if ticket["state"] == "ready" and not ticket.get("blocked_by", [])
     ]
-    if len(ready) != 1:
-        raise ValueError("the coordination tracer requires exactly one ready ticket")
+    if not frontier:
+        raise ValueError("the coordination tracer requires a dependency frontier")
 
-    ticket = ready[0]
+    approved_order = programme["approved_order"]
+    frontier_by_issue = {ticket["issue"]: ticket for ticket in frontier}
+    ordered_frontier_issues = [
+        issue for issue in approved_order if issue in frontier_by_issue
+    ]
+    if not ordered_frontier_issues:
+        raise ValueError("the dependency frontier requires approved order")
+
+    override_issue = snapshot.get("user_instruction", {}).get("override_issue")
+    override_ticket = frontier_by_issue.get(override_issue)
+    override_gates = (override_ticket or {}).get("gates", {})
+    override_is_safe = override_ticket is not None and not any(
+        override_gates.get(gate)
+        for gate in ("safety", "approval", "adr_conflict")
+    )
+    ticket = (
+        override_ticket
+        if override_is_safe
+        else frontier_by_issue[ordered_frontier_issues[0]]
+    )
     programme_issue = programme["issue"]
     ticket_issue = ticket["issue"]
+    for gate in ("safety", "approval"):
+        if ticket.get("gates", {}).get(gate):
+            return {
+                "decision": "stop",
+                "reason": f"{gate}-gate",
+                "selected_ticket": ticket_issue,
+                "root_mutation_permitted": False,
+                "requested_effects": [],
+            }
+    if ticket.get("gates", {}).get("adr_conflict"):
+        return {
+            "decision": "stop",
+            "reason": "adr-conflict",
+            "selected_ticket": ticket_issue,
+            "root_mutation_permitted": False,
+            "requested_effects": [
+                {
+                    "effect": "record-blocker",
+                    "issue": ticket_issue,
+                    "state": "waiting",
+                    "gate": "adr",
+                }
+            ],
+        }
+    intent = snapshot.get("user_instruction", {}).get("intent", "coordinate")
+    routed_intent = (
+        ticket.get("intent", "implementation")
+        if intent == "coordinate"
+        else "implementation"
+        if intent == "implement"
+        else intent
+    )
+    if routed_intent not in ASK_MATT_ROUTES:
+        raise ValueError("Ask Matt cannot route the requested intent")
+    repository_mutating = routed_intent in REPOSITORY_MUTATING_INTENTS
+    if repository_mutating and not snapshot["repository"].get(
+        "isolated_workspaces", False
+    ):
+        return {
+            "decision": "stop",
+            "reason": "isolated-workspace-unavailable",
+            "selected_ticket": ticket_issue,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
     direct_implementation = (
         snapshot.get("user_instruction", {}).get("intent") == "implement"
     )
+    delegation = {
+        "effect": "delegate",
+        "router": "ask-matt",
+        "intent": routed_intent,
+        "workflow": ASK_MATT_ROUTES[routed_intent],
+        "programme": programme_issue,
+        "issue": ticket_issue,
+        "fresh_task": True,
+        "isolated_workspace": True,
+        "task_title": f"[programme #{programme_issue}] {ticket['title']}",
+        "scope": {"issues": [ticket_issue]},
+        "read_before_edit": [
+            "repository-instructions",
+            "domain-vocabulary",
+            "relevant-adrs",
+            "complete-issue",
+        ],
+    }
+    if repository_mutating:
+        delegation["branch"] = {"issue_specific": True, "before_edit": True}
+    if routed_intent == "implementation":
+        delegation.update(
+            {
+                "implementation_contract": {
+                    "tdd": True,
+                    "review_axes": [
+                        "repository-standards-and-security",
+                        "issue-behavior-and-acceptance",
+                    ],
+                    "commit": True,
+                    "open_pull_request": True,
+                    "record_blocker_durably": True,
+                    "stop_before": ["merge", "ticket-selection"],
+                },
+            }
+        )
     return {
         "decision": "refuse-and-delegate" if direct_implementation else "delegate",
         "root_request": "refused" if direct_implementation else "coordination",
         "selected_ticket": ticket_issue,
+        "decisive_evidence": {
+            "dependency_frontier": sorted(frontier_by_issue),
+            "approved_order": approved_order,
+            "human_override": (
+                "honored"
+                if override_is_safe
+                else "rejected"
+                if override_issue is not None
+                else None
+            ),
+        },
         "root_mutation_permitted": False,
-        "requested_effects": [
-            {
-                "effect": "delegate",
-                "router": "ask-matt",
-                "programme": programme_issue,
-                "issue": ticket_issue,
-                "fresh_task": True,
-                "task_title": (
-                    f"[programme #{programme_issue}] {ticket['title']}"
-                ),
-                "scope": {"issues": [ticket_issue]},
-            }
-        ],
+        "requested_effects": [delegation],
     }
 
 
