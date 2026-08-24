@@ -1457,7 +1457,7 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+def _trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     if "bootstrap" in snapshot:
         return bootstrap(snapshot)
     if "tracker" in snapshot:
@@ -2004,6 +2004,45 @@ def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         "root_mutation_permitted": False,
         "requested_effects": [delegation],
     }
+
+
+def configured_integrations(snapshot: Dict[str, Any]) -> list:
+    integrations = snapshot.get("repository", {}).get(
+        "configured_integrations", {}
+    )
+    if not isinstance(integrations, dict):
+        raise ValueError("invalid configured integrations")
+    for name, integration in integrations.items():
+        if not (
+            isinstance(name, str)
+            and name.strip()
+            and isinstance(integration, dict)
+            and integration.get("source") == "installed-skill"
+            and integration.get("approved") is True
+            and integration.get("capability") == name
+            and isinstance(integration.get("resolver"), str)
+            and integration["resolver"].strip()
+        ):
+            raise ValueError("invalid configured integration")
+    return sorted(integrations)
+
+
+def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    result = _trace(snapshot)
+    integrations = configured_integrations(snapshot)
+    if integrations:
+        result.setdefault("decisive_evidence", {})[
+            "configured_integrations"
+        ] = integrations
+    if (
+        snapshot.get("user_instruction", {}).get("dry_run") is True
+        and result.get("requested_effects")
+    ):
+        result["proposed_decision"] = result["decision"]
+        result["decision"] = "dry-run"
+        result["proposed_effects"] = result["requested_effects"]
+        result["requested_effects"] = []
+    return result
 
 
 def main() -> None:

@@ -226,6 +226,10 @@ is present.
 8. Present the result as a bounded delegation plan. Do not execute the child
    work in the root task.
 
+When the user requests a dry run, return the same decisive evidence and bounded
+transition as a proposal, but request no effect. A dry run never authorizes a
+delegation, mutation, approval-gated action, or external change.
+
 If the durable evidence does not establish an ordered dependency frontier, stop
 and report the missing or conflicting evidence instead of choosing.
 
