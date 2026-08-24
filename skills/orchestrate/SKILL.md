@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Coordinate the current repository from a read-only root task. Use when a prepared repository has one active programme and ready tracker work that must be selected and handed to a fresh child task through Ask Matt.
+description: Coordinate or recover the current repository from a read-only root task. Use when a prepared repository has one active programme whose durable tracker and repository evidence must be reconciled before the next action.
 ---
 
 # Orchestrate
@@ -14,6 +14,8 @@ the root checkout.
 - Treat the current checkout as coordination-only.
 - Use repository instructions and its local orchestration contract to discover
   the configured tracker and the active programme.
+- Keep mutable programme state in the tracker. The repository contract defines
+  policy and capabilities, never the current runtime state.
 - Read durable repository, tracker, and task evidence through installed skills
   or declared capabilities. Do not embed provider commands or assumptions here.
 - Never research, design, debug, implement, edit repository content, create a
@@ -22,14 +24,84 @@ the root checkout.
 - If the user asks the root task to implement, refuse that part and continue by
   returning the valid delegated next action.
 
+## Recover durable state first
+
+On every fresh task, recover the programme from durable evidence before
+selecting work. Prior chat may be absent and is never evidence that programme
+state is absent.
+
+1. Discover exactly one active programme and its explicit current-ticket
+   reference from the configured tracker.
+2. Locate that ticket and exactly one structured checkpoint comment.
+   A version-one checkpoint contains every field below, including explicit
+   `null` values where evidence is not yet available. Reject unrecognized
+   fields rather than copying them into operational output:
+
+   ```json
+   {
+     "version": 1,
+     "state": "active",
+     "task_id": "task-42",
+     "branch": "feat/issue-42-audit-log",
+     "pull_request": null,
+     "attempt": 1,
+     "verified_commit": null,
+     "blocker": null,
+     "next_action": "watch the active task",
+     "updated_at": "2030-01-02T03:04:05Z"
+   }
+   ```
+
+3. Reconcile the checkpoint with live task, remote branch, pull-request, merge,
+   independently verified main, and tracker issue evidence. Prefer the evidence
+   with the newer update time after comparing RFC 3339 instants. Preserve the
+   names and resolutions of contradictory fields in the structured `conflicts`
+   result even when one side wins; do not repeat their potentially sensitive
+   values.
+4. Normalize the durable inputs for `scripts/trace.py`. Use tracker issue and
+   comment identifiers, not copied provider responses:
+
+   ```json
+   {
+     "repository": {
+       "coordination_only": true,
+       "branches": [],
+       "main": {"verified_commit": null}
+     },
+     "tracker": {
+       "programmes": [{"issue": 41, "state": "active",
+         "current_ticket": 42, "tickets": [42]}],
+       "tickets": [{
+         "issue": 42,
+         "state": "open",
+         "checkpoint_comments": [{
+           "id": "checkpoint-comment-42",
+           "checkpoint": {"version": 1, "state": "ready", "task_id": null,
+             "branch": null, "pull_request": null, "attempt": 1,
+             "verified_commit": null, "blocker": null,
+             "next_action": "delegate issue #42",
+             "updated_at": "2030-01-02T03:04:05Z"}
+         }]
+       }]
+     },
+     "tasks": [],
+     "pull_requests": []
+   }
+   ```
+
+5. Report the recovered lifecycle as `ready`, `active`, `waiting`, or `done`.
+   `done` requires a merged pull request, the same commit independently verified
+   on main with recorded verification evidence, checked acceptance criteria,
+   and a closed tracker issue. Never accept `done` from the checkpoint alone.
+6. When reconciliation changes the checkpoint, request one update to its
+   existing comment identifier. Never append a second status comment.
+
 ## Trace one ready ticket
 
-1. Read the repository instructions and local orchestration contract before
-   inspecting the configured tracker.
-2. Establish that there is one active programme and one ticket whose durable
+1. After recovery, establish that there is one ticket whose durable
    state is `ready` with no open blockers. Do not infer readiness from chat
    history.
-3. Normalize only the evidence needed by `scripts/trace.py`:
+2. Normalize only the evidence needed by `scripts/trace.py`:
 
    ```json
    {
@@ -45,10 +117,10 @@ the root checkout.
 
    Use `"intent": "implement"` when the user asks the root task to perform the
    implementation itself.
-4. Pass that JSON on standard input to `scripts/trace.py`. The structured result
+3. Pass that JSON on standard input to `scripts/trace.py`. The structured result
    is the observable decision: the selected ticket, whether the root request was
    refused, and the single requested effect.
-5. Present the result as a bounded delegation plan. Do not execute the child
+4. Present the result as a bounded delegation plan. Do not execute the child
    work in the root task.
 
 If the durable evidence does not establish exactly one ready, unblocked ticket,
