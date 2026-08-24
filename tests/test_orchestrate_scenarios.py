@@ -63,6 +63,79 @@ def prepared_snapshot(intent: str = "implementation", programme_state: str = "ac
     }
 
 
+def bootstrap_snapshot() -> dict:
+    return {
+        "repository": {
+            "coordination_only": True,
+            "isolated_workspaces": True,
+        },
+        "bootstrap": {
+            "programme_issue": 6,
+            "tracker": {"capability_tickets": []},
+            "evidence": {
+                name: {"present": True}
+                for name in (
+                    "repository_structure",
+                    "tracker_state",
+                    "agent_instructions",
+                    "templates",
+                    "ci",
+                    "security",
+                    "deployment",
+                    "data",
+                    "installed_skills",
+                    "programme_evidence",
+                )
+            },
+            "conventions": {
+                "tracker": {"satisfies_contract": True},
+                "checkpoint": {"satisfies_contract": True},
+                "programme_discovery": {"satisfies_contract": False},
+            },
+            "local_contract": None,
+            "agent_instructions": {"discovers_contract": False},
+            "policy": {"published_version": 1, "adopted_version": None},
+            "capability_gaps": [
+                {
+                    "category": "security_scanning",
+                    "reason": "no repository security scan is configured",
+                    "approved": False,
+                }
+            ],
+        },
+    }
+
+
+def local_orchestration_contract(policy_version: int = 1) -> dict:
+    return {
+        "path": "docs/agents/orchestrate.md",
+        "policy_version": policy_version,
+        "content": {
+            "orchestration-policy-version": {"version": policy_version},
+            "verification": {
+                "commands": ["python3 -m unittest"],
+                "evidence": "passing exit status",
+            },
+            "programme-discovery": {
+                "source": "configured-tracker",
+                "active_selector": "one active programme",
+            },
+            "branch-and-merge-policy": {
+                "branch_pattern": "feat/issue-{issue}",
+                "merge_methods": ["repository-approved"],
+            },
+            "approval-limits": {"gates": ["credentials", "permissions"]},
+            "skill-allowlist": {"skills": [], "publishers": []},
+            "research-topics-and-schedules": {
+                "topics": [],
+                "cadences": {"default": "monthly"},
+            },
+            "exceptions": {"items": []},
+        },
+        "runtime_state_present": False,
+    }
+
+
 def durable_snapshot(current_checkpoint: dict, **overrides: object) -> dict:
     snapshot = {
         "repository": {
@@ -251,6 +324,281 @@ def delivered_work_snapshot(**overrides: object) -> dict:
 
 
 class OrchestrateScenarios(unittest.TestCase):
+    def test_bootstrap_audits_evidence_and_reuses_only_satisfying_conventions(
+        self,
+    ) -> None:
+        outcome = run_scenario(bootstrap_snapshot())
+
+        self.assertEqual(outcome["decision"], "bootstrap-audit")
+        self.assertEqual(
+            outcome["audit"]["inspected"],
+            [
+                "repository_structure",
+                "tracker_state",
+                "agent_instructions",
+                "templates",
+                "ci",
+                "security",
+                "deployment",
+                "data",
+                "installed_skills",
+                "programme_evidence",
+            ],
+        )
+        self.assertEqual(outcome["audit"]["reused"], ["checkpoint", "tracker"])
+        self.assertEqual(
+            outcome["control_plane"]["missing"],
+            ["agent-discovery", "local-contract", "programme-discovery"],
+        )
+        self.assertEqual(
+            outcome["capability_gaps"],
+            [
+                {
+                    "category": "security_scanning",
+                    "reason": "repository capability gap: security_scanning",
+                    "status": "proposal",
+                }
+            ],
+        )
+        self.assertFalse(outcome["root_mutation_permitted"])
+        self.assertTrue(
+            all(
+                effect["effect"] != "delegate"
+                for effect in outcome["requested_effects"]
+            )
+        )
+
+        unavailable = bootstrap_snapshot()
+        unavailable["bootstrap"]["evidence"]["security"] = {"present": False}
+        unavailable["bootstrap"]["evidence"]["deployment"] = {"present": False}
+
+        incomplete = run_scenario(unavailable)
+
+        self.assertNotIn("security", incomplete["audit"]["inspected"])
+        self.assertEqual(
+            incomplete["audit"]["unavailable"], ["security", "deployment"]
+        )
+
+        unavailable["bootstrap"]["evidence"]["tracker_state"] = {
+            "present": False
+        }
+        uncorroborated = run_scenario(unavailable)
+        self.assertNotIn("tracker", uncorroborated["audit"]["reused"])
+        self.assertIn("tracker", uncorroborated["control_plane"]["missing"])
+
+    def test_policy_changes_produce_reviewable_migrations_without_rewrites(
+        self,
+    ) -> None:
+        snapshot = bootstrap_snapshot()
+        snapshot["bootstrap"]["conventions"]["programme_discovery"] = {
+            "satisfies_contract": True
+        }
+        snapshot["bootstrap"]["agent_instructions"] = {
+            "discovers_contract": True
+        }
+        snapshot["bootstrap"]["local_contract"] = local_orchestration_contract()
+        snapshot["bootstrap"]["local_contract"]["local_decisions"] = [
+            "repository-selected merge policy"
+        ]
+        snapshot["bootstrap"]["policy"] = {
+            "published_version": 2,
+            "adopted_version": 1,
+            "change_ids": ["require-explicit-capability-approval"],
+        }
+        snapshot["bootstrap"]["capability_gaps"] = []
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["control_plane"]["missing"], [])
+        self.assertEqual(
+            outcome["policy"],
+            {
+                "published_version": 2,
+                "adopted_version": 1,
+                "status": "migration-proposed",
+            },
+        )
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "propose-policy-migration",
+                    "path": "docs/agents/orchestrate.md",
+                    "from_version": 1,
+                    "to_version": 2,
+                    "reviewable": True,
+                    "silent_rewrite": False,
+                    "preserve_local_decisions": True,
+                    "preserve_runtime_state": True,
+                    "change_ids": ["require-explicit-capability-approval"],
+                    "approval_required": True,
+                }
+            ],
+        )
+
+    def test_bootstrap_delegates_one_capability_only_after_approval(self) -> None:
+        snapshot = bootstrap_snapshot()
+        snapshot["bootstrap"]["capability_gaps"] = [
+            {
+                "issue": 45,
+                "title": "Add security scanning",
+                "category": "security_scanning",
+                "reason": "no repository security scan is configured",
+                "approved": True,
+            }
+        ]
+        snapshot["bootstrap"]["tracker"]["capability_tickets"] = [
+            {"issue": 45, "state": "ready"}
+        ]
+        snapshot["approvals"] = {
+            "bootstrap_capability": {
+                "approved": True,
+                "scope": {"issue": 45, "category": "security_scanning"},
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "bootstrap-delegate-capability")
+        delegations = [
+            effect
+            for effect in outcome["requested_effects"]
+            if effect["effect"] == "delegate"
+        ]
+        self.assertEqual(len(delegations), 1)
+        delegation = delegations[0]
+        self.assertEqual(delegation["router"], "ask-matt")
+        self.assertEqual(delegation["workflow"], "/implement")
+        self.assertEqual(delegation["scope"], {"issues": [45]})
+        self.assertFalse(delegation["apply_in_root"])
+        self.assertFalse(outcome["root_mutation_permitted"])
+
+        snapshot["tasks"] = [
+            {
+                "id": "delivery-active",
+                "state": "running",
+                "lane": "delivery",
+                "mutating": True,
+            }
+        ]
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "active-mutating-task")
+        self.assertFalse(
+            any(
+                effect["effect"] == "delegate"
+                for effect in stopped["requested_effects"]
+            )
+        )
+
+    def test_runtime_state_in_local_contract_is_reported_not_rewritten(self) -> None:
+        snapshot = bootstrap_snapshot()
+        snapshot["bootstrap"]["agent_instructions"] = {
+            "discovers_contract": True
+        }
+        snapshot["bootstrap"]["local_contract"] = local_orchestration_contract()
+        snapshot["bootstrap"]["local_contract"].update(
+            {
+                "runtime_state_present": True,
+                "runtime_state": {"private_task": "must-not-be-copied"},
+            }
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertIn("local-contract", outcome["control_plane"]["missing"])
+        self.assertNotIn("agent-discovery", outcome["control_plane"]["missing"])
+        self.assertEqual(
+            outcome["contract"],
+            {
+                "path": "docs/agents/orchestrate.md",
+                "status": "runtime-state-present",
+                "runtime_state_permitted": False,
+            },
+        )
+        proposal = next(
+            effect
+            for effect in outcome["requested_effects"]
+            if effect["effect"] == "propose-local-contract"
+        )
+        self.assertEqual(proposal["path"], "docs/agents/orchestrate.md")
+        self.assertEqual(proposal["agent_discovery"], "AGENTS.md")
+        self.assertFalse(proposal["runtime_state_permitted"])
+        self.assertNotIn("must-not-be-copied", json.dumps(outcome))
+
+    def test_bootstrap_does_not_delegate_an_untrusted_skill_publisher(self) -> None:
+        snapshot = bootstrap_snapshot()
+        snapshot["repository"]["public_skill_source_allowlist"] = [
+            "public-registry/release-skill"
+        ]
+        snapshot["bootstrap"]["tracker"]["capability_tickets"] = [
+            {"issue": 46, "state": "ready"}
+        ]
+        snapshot["bootstrap"]["capability_gaps"] = [
+            {
+                "issue": 46,
+                "title": "Install release skill",
+                "category": "installed_skill",
+                "reason": "private-provider-response-must-not-leak",
+                "approved": True,
+                "installation": {
+                    "publisher": "untrusted-lab",
+                    "source": "public-registry/release-skill",
+                    "version": "sha256:abc123",
+                    "permissions": ["repository:read"],
+                    "reason": "inspect release metadata",
+                },
+            }
+        ]
+        snapshot["approvals"] = {
+            "bootstrap_capability": {
+                "approved": True,
+                "scope": {"issue": 46, "category": "installed_skill"},
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "publisher-approval-required")
+        self.assertFalse(
+            any(
+                effect["effect"] == "delegate"
+                for effect in outcome["requested_effects"]
+            )
+        )
+        self.assertNotIn("private-provider-response", json.dumps(outcome))
+        self.assertNotIn("public-registry", json.dumps(outcome))
+
+    def test_agent_discovery_gap_preserves_an_adopted_local_contract(self) -> None:
+        snapshot = bootstrap_snapshot()
+        snapshot["bootstrap"]["conventions"]["programme_discovery"] = {
+            "satisfies_contract": True
+        }
+        snapshot["bootstrap"]["local_contract"] = local_orchestration_contract()
+        snapshot["bootstrap"]["policy"]["adopted_version"] = 1
+        snapshot["bootstrap"]["capability_gaps"] = []
+
+        outcome = run_scenario(snapshot)
+
+        effects = outcome["requested_effects"]
+        self.assertTrue(
+            any(effect["effect"] == "propose-agent-discovery" for effect in effects)
+        )
+        self.assertFalse(
+            any(effect["effect"] == "propose-local-contract" for effect in effects)
+        )
+
+        versionless = bootstrap_snapshot()
+        versionless["bootstrap"]["local_contract"] = local_orchestration_contract()
+        versionless["bootstrap"]["local_contract"]["policy_version"] = None
+        versionless["bootstrap"]["local_contract"]["content"][
+            "orchestration-policy-version"
+        ] = {"version": None}
+        invalid = run_scenario(versionless)
+        self.assertIn("local-contract", invalid["control_plane"]["missing"])
+
     def test_pending_required_check_prevents_merge(self) -> None:
         snapshot = delivered_work_snapshot()
         snapshot["pull_requests"][0]["required_checks"][0]["state"] = "pending"

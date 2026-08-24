@@ -84,6 +84,36 @@ RESEARCH_CADENCES = {
     "default": "monthly",
     "slow_moving": "quarterly",
 }
+BOOTSTRAP_EVIDENCE = (
+    "repository_structure",
+    "tracker_state",
+    "agent_instructions",
+    "templates",
+    "ci",
+    "security",
+    "deployment",
+    "data",
+    "installed_skills",
+    "programme_evidence",
+)
+MINIMUM_CONTROL_PLANE = {
+    "tracker",
+    "checkpoint",
+    "programme-discovery",
+    "local-contract",
+    "agent-discovery",
+}
+LOCAL_CONTRACT_PATH = "docs/agents/orchestrate.md"
+LOCAL_CONTRACT_SECTIONS = (
+    "orchestration-policy-version",
+    "verification",
+    "programme-discovery",
+    "branch-and-merge-policy",
+    "approval-limits",
+    "skill-allowlist",
+    "research-topics-and-schedules",
+    "exceptions",
+)
 
 
 def parse_timestamp(value: Any) -> datetime:
@@ -352,6 +382,423 @@ def stopped_delegation(
         "selected_ticket": issue,
         "root_mutation_permitted": False,
         "requested_effects": effects or [],
+    }
+
+
+def valid_local_contract_content(content: Any, policy_version: int) -> bool:
+    if (
+        not isinstance(policy_version, int)
+        or isinstance(policy_version, bool)
+        or policy_version <= 0
+        or not isinstance(content, dict)
+        or not set(LOCAL_CONTRACT_SECTIONS).issubset(content)
+    ):
+        return False
+    try:
+        return bool(
+            content["orchestration-policy-version"] == {"version": policy_version}
+            and content["verification"]["commands"]
+            and content["verification"]["evidence"]
+            and content["programme-discovery"]["source"]
+            and content["programme-discovery"]["active_selector"]
+            and content["branch-and-merge-policy"]["branch_pattern"]
+            and content["branch-and-merge-policy"]["merge_methods"]
+            and content["approval-limits"]["gates"]
+            and isinstance(content["skill-allowlist"]["skills"], list)
+            and isinstance(content["skill-allowlist"]["publishers"], list)
+            and isinstance(
+                content["research-topics-and-schedules"]["topics"], list
+            )
+            and content["research-topics-and-schedules"]["cadences"]
+            and isinstance(content["exceptions"]["items"], list)
+        )
+    except (KeyError, TypeError):
+        return False
+
+
+def bootstrap(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    request = snapshot["bootstrap"]
+    evidence = request["evidence"]
+    if set(evidence) != set(BOOTSTRAP_EVIDENCE) or not all(
+        isinstance(evidence[name], dict) for name in BOOTSTRAP_EVIDENCE
+    ):
+        raise ValueError("bootstrap requires complete repository evidence")
+    inspected_evidence = [
+        name
+        for name in BOOTSTRAP_EVIDENCE
+        if evidence[name].get("present") is True
+    ]
+    unavailable_evidence = [
+        name
+        for name in BOOTSTRAP_EVIDENCE
+        if evidence[name].get("present") is not True
+    ]
+
+    conventions = request.get("conventions", {})
+    if not isinstance(conventions, dict):
+        raise ValueError("invalid repository conventions")
+    convention_evidence = {
+        "tracker": "tracker_state",
+        "checkpoint": "tracker_state",
+        "programme_discovery": "programme_evidence",
+    }
+    reused = sorted(
+        name
+        for name, convention in conventions.items()
+        if name in convention_evidence
+        and isinstance(convention, dict)
+        and convention.get("satisfies_contract") is True
+        and evidence[convention_evidence[name]].get("present") is True
+    )
+    normalized_reused = [name.replace("_", "-") for name in reused]
+    missing = set(MINIMUM_CONTROL_PLANE)
+    missing.difference_update(normalized_reused)
+
+    local_contract = request.get("local_contract")
+    contract_status = "missing"
+    if local_contract is not None:
+        if not isinstance(local_contract, dict):
+            raise ValueError("invalid local orchestration contract")
+        runtime_state_present = local_contract.get("runtime_state_present") is True
+        if not (
+            local_contract.get("path") == LOCAL_CONTRACT_PATH
+            and valid_local_contract_content(
+                local_contract.get("content"),
+                local_contract.get("policy_version"),
+            )
+            and not runtime_state_present
+        ):
+            contract_status = (
+                "runtime-state-present" if runtime_state_present else "invalid"
+            )
+            local_contract = None
+        else:
+            contract_status = "candidate"
+    agent_instructions = request.get("agent_instructions", {})
+    if (
+        isinstance(agent_instructions, dict)
+        and agent_instructions.get("discovers_contract") is True
+        and evidence["agent_instructions"].get("present") is True
+    ):
+        missing.discard("agent-discovery")
+
+    capability_gaps = []
+    approved_capabilities = []
+    approved_provenance = {}
+    approvals = snapshot.get("approvals", {})
+    bootstrap_approval = approvals.get("bootstrap_capability", {})
+    tracker = request.get("tracker", {})
+    capability_tickets = tracker.get("capability_tickets", [])
+    if not isinstance(capability_tickets, list):
+        raise ValueError("invalid bootstrap capability tickets")
+    for gap in request.get("capability_gaps", []):
+        category = gap.get("category")
+        supplied_reason = gap.get("reason")
+        if category not in CAPABILITY_CATEGORIES or not (
+            isinstance(supplied_reason, str) and supplied_reason.strip()
+        ):
+            raise ValueError("invalid bootstrap capability gap")
+        reason = f"repository capability gap: {category}"
+        if gap.get("approved") is True:
+            issue = gap.get("issue")
+            title = gap.get("title")
+            approval_scope = {"issue": issue, "category": category}
+            live_ticket = any(
+                isinstance(ticket, dict)
+                and ticket.get("issue") == issue
+                and ticket.get("state") == "ready"
+                for ticket in capability_tickets
+            )
+            exact_approval = bool(
+                isinstance(bootstrap_approval, dict)
+                and bootstrap_approval.get("approved") is True
+                and json_equal_strict(
+                    bootstrap_approval.get("scope"), approval_scope
+                )
+            )
+            if not (
+                isinstance(issue, int)
+                and isinstance(title, str)
+                and title.strip()
+                and live_ticket
+                and exact_approval
+            ):
+                status = "proposal"
+                capability_gaps.append(
+                    {"category": category, "reason": reason, "status": status}
+                )
+                continue
+            pause = delegation_pause(gap, approvals)
+            if pause is not None:
+                return stopped_delegation(
+                    issue, pause["reason"], [pause["effect"]]
+                )
+            if category == "installed_skill":
+                installation = gap.get("installation", {})
+                source = installation.get("source")
+                publisher = installation.get("publisher")
+                immutable_version = installation.get(
+                    "version", installation.get("commit")
+                )
+                permissions = installation.get("permissions")
+                installation_reason = installation.get("reason")
+                if not (
+                    isinstance(publisher, str)
+                    and publisher.strip()
+                    and isinstance(source, str)
+                    and source
+                    in snapshot["repository"].get(
+                        "public_skill_source_allowlist", []
+                    )
+                    and isinstance(immutable_version, str)
+                    and immutable_version.strip()
+                    and isinstance(permissions, list)
+                    and permissions
+                    and all(
+                        isinstance(permission, str) and permission.strip()
+                        for permission in permissions
+                    )
+                    and isinstance(installation_reason, str)
+                    and installation_reason.strip()
+                ):
+                    raise ValueError(
+                        "skill capability requires auditable provenance"
+                    )
+                approval_provenance = {
+                    key: installation[key]
+                    for key in (
+                        "publisher",
+                        "source",
+                        "version",
+                        "commit",
+                        "permissions",
+                        "reason",
+                    )
+                    if key in installation
+                }
+                source_allowlist = snapshot["repository"].get(
+                    "public_skill_source_allowlist", []
+                )
+                provenance = {
+                    key: approval_provenance[key]
+                    for key in ("publisher", "version", "commit", "permissions")
+                    if key in approval_provenance
+                }
+                provenance["source_reference"] = (
+                    "repository-public-skill-source-allowlist:"
+                    f"{source_allowlist.index(source)}"
+                )
+                provenance["reason"] = "repository capability gap: installed_skill"
+                publisher_approval = approvals.get(
+                    "unverified_publisher", {}
+                )
+                publisher_trusted = bool(
+                    installation.get("publisher_official") is True
+                    or installation.get("publisher_verified") is True
+                    or publisher
+                    in snapshot["repository"].get(
+                        "skill_publisher_allowlist", []
+                    )
+                    or (
+                        isinstance(publisher_approval, dict)
+                        and publisher_approval.get("approved") is True
+                        and json_equal_strict(
+                            publisher_approval.get("scope"), approval_provenance
+                        )
+                    )
+                )
+                if not publisher_trusted:
+                    return stopped_delegation(
+                        issue,
+                        "publisher-approval-required",
+                        [
+                            record_blocker(
+                                issue,
+                                "publisher",
+                                "skill publisher is not verified or allowlisted",
+                                (
+                                    "verify or explicitly approve the publisher "
+                                    "and bounded skill provenance"
+                                ),
+                            )
+                        ],
+                    )
+                approved_provenance[issue] = provenance
+            approved_capabilities.append(gap)
+            status = "approved"
+        else:
+            status = "proposal"
+        capability_gaps.append(
+            {"category": category, "reason": reason, "status": status}
+        )
+    if len(approved_capabilities) > 1:
+        raise ValueError("bootstrap delegates at most one capability")
+
+    policy = request.get("policy", {})
+    published_version = policy.get("published_version")
+    adopted_version = policy.get("adopted_version")
+    if not (
+        isinstance(published_version, int)
+        and not isinstance(published_version, bool)
+        and published_version > 0
+        and (
+            adopted_version is None
+            or (
+                isinstance(adopted_version, int)
+                and not isinstance(adopted_version, bool)
+                and adopted_version > 0
+            )
+        )
+    ):
+        raise ValueError("invalid orchestration policy versions")
+    if local_contract is not None:
+        if local_contract.get("policy_version") == adopted_version:
+            contract_status = "adopted"
+            missing.discard("local-contract")
+        else:
+            contract_status = "policy-version-mismatch"
+            local_contract = None
+
+    effects = []
+    if missing:
+        effects.append(
+            {
+                "effect": "propose-control-plane",
+                "missing": sorted(missing),
+                "minimum_only": True,
+                "approval_required": True,
+            }
+        )
+    if "local-contract" in missing:
+        effects.append(
+            {
+                "effect": "propose-local-contract",
+                "path": LOCAL_CONTRACT_PATH,
+                "agent_discovery": "AGENTS.md",
+                "required_sections": list(LOCAL_CONTRACT_SECTIONS),
+                "runtime_state_permitted": False,
+                "reviewable": True,
+            }
+        )
+    elif "agent-discovery" in missing:
+        effects.append(
+            {
+                "effect": "propose-agent-discovery",
+                "path": "AGENTS.md",
+                "contract": LOCAL_CONTRACT_PATH,
+                "reviewable": True,
+            }
+        )
+    policy_status = "current"
+    if adopted_version is None:
+        policy_status = "adoption-proposed"
+        effects.append(
+            {
+                "effect": "propose-policy-adoption",
+                "path": LOCAL_CONTRACT_PATH,
+                "version": published_version,
+                "reviewable": True,
+                "silent_rewrite": False,
+            }
+        )
+    elif adopted_version < published_version:
+        change_ids = policy.get("change_ids")
+        if not (
+            isinstance(change_ids, list)
+            and change_ids
+            and all(
+                isinstance(change_id, str) and is_bounded_scope(change_id)
+                for change_id in change_ids
+            )
+        ):
+            raise ValueError("policy migration requires a reviewable delta")
+        policy_status = "migration-proposed"
+        effects.append(
+            {
+                "effect": "propose-policy-migration",
+                "path": LOCAL_CONTRACT_PATH,
+                "from_version": adopted_version,
+                "to_version": published_version,
+                "reviewable": True,
+                "silent_rewrite": False,
+                "preserve_local_decisions": True,
+                "preserve_runtime_state": True,
+                "change_ids": change_ids,
+                "approval_required": True,
+            }
+        )
+    elif adopted_version > published_version:
+        policy_status = "local-policy-newer"
+    for gap in capability_gaps:
+        if gap["status"] == "approved":
+            continue
+        effects.append(
+            {
+                "effect": "propose-capability",
+                "category": gap["category"],
+                "reason": gap["reason"],
+                "approval_required": True,
+            }
+        )
+
+    decision = "bootstrap-audit"
+    if approved_capabilities:
+        approved = approved_capabilities[0]
+        programme_issue = request.get("programme_issue")
+        if not isinstance(programme_issue, int):
+            raise ValueError("approved bootstrap capability requires a programme")
+        if not snapshot["repository"].get("isolated_workspaces", False):
+            raise ValueError("approved bootstrap capability requires isolation")
+        active_mutating_tasks = [
+            task
+            for task in snapshot.get("tasks", [])
+            if task.get("state") in {"running", "active"}
+            and task.get("mutating") is True
+            and task.get("lane") in {"delivery", "capability"}
+        ]
+        if active_mutating_tasks:
+            return stopped_delegation(
+                approved["issue"], "active-mutating-task"
+            )
+        effects.append(
+            capability_delegation(
+                programme_issue,
+                approved["issue"],
+                approved["title"],
+                **(
+                    {
+                        "capability_provenance": approved_provenance[
+                            approved["issue"]
+                        ]
+                    }
+                    if approved["issue"] in approved_provenance
+                    else {}
+                ),
+            )
+        )
+        decision = "bootstrap-delegate-capability"
+
+    return {
+        "decision": decision,
+        "audit": {
+            "inspected": inspected_evidence,
+            "unavailable": unavailable_evidence,
+            "reused": normalized_reused,
+        },
+        "control_plane": {"missing": sorted(missing)},
+        "contract": {
+            "path": LOCAL_CONTRACT_PATH,
+            "status": contract_status,
+            "runtime_state_permitted": False,
+        },
+        "capability_gaps": capability_gaps,
+        "policy": {
+            "published_version": published_version,
+            "adopted_version": adopted_version,
+            "status": policy_status,
+        },
+        "root_mutation_permitted": False,
+        "requested_effects": effects,
     }
 
 
@@ -1011,6 +1458,8 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    if "bootstrap" in snapshot:
+        return bootstrap(snapshot)
     if "tracker" in snapshot:
         return recover(snapshot)
 
