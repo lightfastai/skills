@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrate"
+  short_description: "Coordinate one ready repository ticket"
+  default_prompt: "Use $orchestrate to inspect the current programme and return the next bounded Ask Matt delegation without implementing in the root task."
