@@ -96,6 +96,38 @@ state is absent.
 6. When reconciliation changes the checkpoint, request one update to its
    existing comment identifier. Never append a second status comment.
 
+## Verify, merge, and close delivered work
+
+Treat a child pull request as a handoff, never as authority to merge. Child
+tasks are not merge actors. Once a handoff is marked delivered, inspect these
+gates independently and report every gate's state:
+
+- the ticket's acceptance criteria are checked;
+- every required check has passed rather than being pending or failed;
+- any required review is approved;
+- the pull-request branch is mergeable without conflicts; and
+- repository policy permits at least one merge method supported by the host.
+
+Wait without requesting a merge when any gate is not satisfied. When all gates
+pass, select the first repository-permitted method that the host supports and
+request one root-orchestrator merge for the observed pull-request head commit.
+Do not assume squash, merge, or rebase support.
+
+After the pull request reports merged, request an independent verification of
+its merged commit on `main`. A recorded failed verification transitions the
+checkpoint to Waiting, keeps `verified_commit` null, records the blocker and a
+repair-and-reverify next action, and does not request ticket closure. A matching
+verified-main commit is still not Done until verification evidence is recorded,
+acceptance is checked, and the tracker issue is closed.
+
+Before requesting issue closure, include the pull request, merge commit,
+verified main commit, verification record, and acceptance record as closure
+evidence. Release an isolated workspace only after the issue is Done and live
+evidence proves that the child head exists remotely, the pull request is
+merged, and that merged commit is the independently verified main commit.
+Missing remote proof must preserve the workspace even when other Done evidence
+is present.
+
 ## Schedule the delivery frontier
 
 1. After recovery, list the programme's ready tickets and remove every ticket
