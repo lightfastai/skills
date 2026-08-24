@@ -259,6 +259,11 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
 
     decision = "recover"
     notifications = []
+    watch_cursor = (
+        task.get("native_wait", {}).get("after_cursor")
+        if task is not None
+        else None
+    )
     meaningful_transitions = {
         "lifecycle",
         "blocker",
@@ -267,11 +272,15 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         "verification",
     }
     for event in snapshot.get("events", []):
+        if event.get("cursor") == watch_cursor:
+            continue
         if event.get("kind") in meaningful_transitions:
             notification = {"transition": event["kind"]}
             if "state" in event:
                 notification["state"] = event["state"]
             notifications.append(notification)
+        if event.get("cursor") is not None:
+            watch_cursor = event["cursor"]
     recovery_effect = None
     failure_is_current = (
         task is not None
@@ -280,11 +289,20 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         and parse_timestamp(task["updated_at"])
         >= parse_timestamp(checkpoint["updated_at"])
     )
+    task_cannot_resume = bool(
+        task is not None
+        and task["state"] in {"failed", "lost", "unavailable"}
+        and task.get("resumable") is False
+    )
     duplicate_work = len(live_branches) > 1 or len(live_pull_requests) > 1
-    if duplicate_work and (failure_is_current or stale):
-        observed_at = snapshot["observed_at"]
+    def record_transition(evidence: Dict[str, Any]) -> None:
+        observed_at = snapshot.get("observed_at", task["updated_at"])
         parse_timestamp(observed_at)
-        reconciled.update(
+        reconciled.update(evidence)
+        reconciled["updated_at"] = observed_at
+
+    if duplicate_work and (failure_is_current or task_cannot_resume):
+        record_transition(
             {
                 "state": "waiting",
                 "branch": checkpoint["branch"],
@@ -295,7 +313,6 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                     "prevent safe recovery"
                 ),
                 "next_action": "resolve duplicate branch or pull-request evidence",
-                "updated_at": observed_at,
             }
         )
         decision = "wait"
@@ -305,15 +322,12 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         and checkpoint["attempt"] == 1
         and task.get("resumable") is True
     ):
-        observed_at = snapshot["observed_at"]
-        parse_timestamp(observed_at)
-        reconciled.update(
+        record_transition(
             {
                 "state": "active",
                 "attempt": 2,
                 "blocker": None,
                 "next_action": f"resume {task['id']}",
-                "updated_at": observed_at,
             }
         )
         decision = "recover-task"
@@ -333,16 +347,13 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         and checkpoint["attempt"] == 1
         and task.get("resumable") is False
     ):
-        observed_at = snapshot["observed_at"]
-        parse_timestamp(observed_at)
-        reconciled.update(
+        record_transition(
             {
                 "state": "active",
                 "task_id": None,
                 "attempt": 2,
                 "blocker": None,
                 "next_action": "await replacement task",
-                "updated_at": observed_at,
             }
         )
         decision = "replace-task"
@@ -363,6 +374,17 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         }
         notifications.append({"transition": "recovery-attempt", "attempt": 2})
     elif (failure_is_current or stale) and checkpoint["attempt"] >= 2:
+        record_transition(
+            {
+                "state": "waiting",
+                "blocker": task.get(
+                    "blocker", "task is unavailable and cannot resume"
+                ),
+                "next_action": task.get(
+                    "next_action", "request human intervention"
+                ),
+            }
+        )
         decision = "wait"
         notifications.append(
             {"transition": "recovery-exhausted", "attempt": checkpoint["attempt"]}
@@ -389,7 +411,7 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                 {
                     "effect": "wait-task",
                     "task_id": task["id"],
-                    "after_cursor": native_wait.get("after_cursor"),
+                    "after_cursor": watch_cursor,
                 }
             )
             if pull_request is not None:
@@ -401,7 +423,8 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 )
     elif (
-        task is not None
+        decision == "recover"
+        and task is not None
         and task["state"] in {"lost", "unavailable"}
         and repository_progress
         and pull_request is not None

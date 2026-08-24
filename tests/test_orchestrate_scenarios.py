@@ -329,7 +329,7 @@ class OrchestrateScenarios(unittest.TestCase):
                 "resumable": True,
                 "blocker": "replacement failed repository verification",
                 "next_action": "request human intervention",
-                "updated_at": "2026-08-24T10:09:00Z",
+                "updated_at": "2026-08-24T10:08:00Z",
             }
         )
         current = snapshot["tracker"]["tickets"][1]["checkpoint_comments"][0][
@@ -421,8 +421,17 @@ class OrchestrateScenarios(unittest.TestCase):
             }
         )
         snapshot["events"] = [
-            {"kind": "heartbeat", "elapsed_seconds": 3600},
-            {"kind": "checks", "state": "failed"},
+            {
+                "kind": "checks",
+                "state": "pending",
+                "cursor": "task-event-17",
+            },
+            {
+                "kind": "heartbeat",
+                "elapsed_seconds": 3600,
+                "cursor": "task-event-18",
+            },
+            {"kind": "checks", "state": "failed", "cursor": "task-event-19"},
         ]
 
         outcome = run_scenario(snapshot)
@@ -437,10 +446,8 @@ class OrchestrateScenarios(unittest.TestCase):
             {
                 "id": "task-8",
                 "issue": 8,
-                "state": "failed",
+                "state": "unavailable",
                 "resumable": False,
-                "blocker": "task host no longer exists",
-                "next_action": "replace task-8",
                 "updated_at": "2026-08-24T10:05:00Z",
             }
         )
