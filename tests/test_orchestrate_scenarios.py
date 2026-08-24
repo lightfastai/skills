@@ -165,7 +165,326 @@ def completed_snapshot(
     return snapshot
 
 
+def active_work_snapshot(task: dict, **overrides: object) -> dict:
+    current = checkpoint(
+        state="active",
+        task_id="task-8",
+        branch="feat/issue-8-durable-recovery",
+        pull_request="https://example.test/pulls/18",
+        next_action="watch task-8",
+    )
+    snapshot = durable_snapshot(current, tasks=[task])
+    snapshot["repository"]["branches"] = [
+        {
+            "issue": 8,
+            "name": current["branch"],
+            "head_commit": "abc123",
+            "updated_at": current["updated_at"],
+        }
+    ]
+    snapshot["pull_requests"] = [
+        {
+            "issue": 8,
+            "url": current["pull_request"],
+            "branch": current["branch"],
+            "state": "open",
+            "head_commit": "abc123",
+            "checks_state": "pending",
+            "updated_at": current["updated_at"],
+        }
+    ]
+    snapshot.update(overrides)
+    return snapshot
+
+
 class OrchestrateScenarios(unittest.TestCase):
+    def test_active_work_uses_native_waits_without_noisy_notification(self) -> None:
+        outcome = run_scenario(
+            active_work_snapshot(
+                {
+                    "id": "task-8",
+                    "issue": 8,
+                    "state": "running",
+                    "resumable": True,
+                    "native_wait": {"after_cursor": "task-event-17"},
+                    "elapsed_seconds": 864000,
+                    "updated_at": "2026-08-24T10:00:00Z",
+                }
+            )
+        )
+
+        self.assertEqual(outcome["decision"], "watch")
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "wait-task",
+                    "task_id": "task-8",
+                    "after_cursor": "task-event-17",
+                },
+                {
+                    "effect": "watch-repository-checks",
+                    "pull_request": "https://example.test/pulls/18",
+                    "head_commit": "abc123",
+                },
+            ],
+        )
+        self.assertEqual(outcome["notifications"], [])
+        self.assertFalse(outcome["stale"])
+
+    def test_first_failure_resumes_the_original_task(self) -> None:
+        snapshot = active_work_snapshot(
+            {
+                "id": "task-8",
+                "issue": 8,
+                "state": "failed",
+                "resumable": True,
+                "failure": "execution host stopped unexpectedly",
+                "blocker": "execution host stopped unexpectedly",
+                "next_action": "recover task-8",
+                "updated_at": "2026-08-24T10:05:00Z",
+            }
+        )
+        snapshot["observed_at"] = "2026-08-24T10:06:00Z"
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "recover-task")
+        self.assertEqual(outcome["lifecycle_state"], "active")
+        self.assertEqual(outcome["checkpoint"]["attempt"], 2)
+        self.assertEqual(outcome["checkpoint"]["task_id"], "task-8")
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "update-checkpoint",
+                    "comment_id": "checkpoint-comment-8",
+                    "checkpoint": outcome["checkpoint"],
+                },
+                {
+                    "effect": "resume-task",
+                    "task_id": "task-8",
+                    "issue": 8,
+                    "reuse": {
+                        "checkpoint_comment": "checkpoint-comment-8",
+                        "branch": "feat/issue-8-durable-recovery",
+                        "pull_request": "https://example.test/pulls/18",
+                    },
+                },
+            ],
+        )
+        self.assertEqual(
+            outcome["notifications"],
+            [{"transition": "recovery-attempt", "attempt": 2}],
+        )
+
+    def test_first_failure_creates_one_replacement_when_resumption_is_impossible(
+        self,
+    ) -> None:
+        snapshot = active_work_snapshot(
+            {
+                "id": "task-8",
+                "issue": 8,
+                "state": "failed",
+                "resumable": False,
+                "blocker": "task host no longer exists",
+                "next_action": "replace task-8",
+                "updated_at": "2026-08-24T10:05:00Z",
+            }
+        )
+        snapshot["observed_at"] = "2026-08-24T10:06:00Z"
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "replace-task")
+        self.assertEqual(outcome["checkpoint"]["attempt"], 2)
+        self.assertIsNone(outcome["checkpoint"]["task_id"])
+        replacement = outcome["requested_effects"][1]
+        self.assertEqual(
+            replacement,
+            {
+                "effect": "replace-task",
+                "router": "ask-matt",
+                "workflow": "/implement",
+                "issue": 8,
+                "replaces_task": "task-8",
+                "attempt": 2,
+                "reuse": {
+                    "checkpoint_comment": "checkpoint-comment-8",
+                    "branch": "feat/issue-8-durable-recovery",
+                    "pull_request": "https://example.test/pulls/18",
+                },
+                "create_branch": False,
+                "create_pull_request": False,
+            },
+        )
+        self.assertEqual(len(outcome["requested_effects"]), 2)
+
+    def test_second_failure_stops_recovery_in_durable_waiting(self) -> None:
+        snapshot = active_work_snapshot(
+            {
+                "id": "task-8-replacement",
+                "issue": 8,
+                "state": "failed",
+                "resumable": True,
+                "blocker": "replacement failed repository verification",
+                "next_action": "request human intervention",
+                "updated_at": "2026-08-24T10:08:00Z",
+            }
+        )
+        current = snapshot["tracker"]["tickets"][1]["checkpoint_comments"][0][
+            "checkpoint"
+        ]
+        current.update(
+            {
+                "task_id": "task-8-replacement",
+                "attempt": 2,
+                "updated_at": "2026-08-24T10:08:00Z",
+            }
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "wait")
+        self.assertEqual(outcome["lifecycle_state"], "waiting")
+        self.assertEqual(outcome["checkpoint"]["attempt"], 2)
+        self.assertEqual(
+            outcome["checkpoint"]["blocker"],
+            "replacement failed repository verification",
+        )
+        self.assertEqual(
+            outcome["checkpoint"]["next_action"], "request human intervention"
+        )
+        self.assertEqual(len(outcome["requested_effects"]), 1)
+        self.assertEqual(outcome["requested_effects"][0]["effect"], "update-checkpoint")
+        self.assertEqual(
+            outcome["notifications"],
+            [{"transition": "recovery-exhausted", "attempt": 2}],
+        )
+
+    def test_unresumable_task_without_repository_progress_is_stale(self) -> None:
+        snapshot = active_work_snapshot(
+            {
+                "id": "task-8",
+                "issue": 8,
+                "state": "unavailable",
+                "resumable": False,
+                "updated_at": "2026-08-24T10:05:00Z",
+            }
+        )
+        snapshot["repository"]["branches"] = []
+        snapshot["pull_requests"] = []
+        snapshot["observed_at"] = "2026-08-24T10:06:00Z"
+
+        outcome = run_scenario(snapshot)
+
+        self.assertTrue(outcome["stale"])
+        self.assertEqual(outcome["decision"], "replace-task")
+        self.assertEqual(outcome["requested_effects"][1]["effect"], "replace-task")
+
+    def test_repository_progress_prevents_stale_replacement(self) -> None:
+        outcome = run_scenario(
+            active_work_snapshot(
+                {
+                    "id": "task-8",
+                    "issue": 8,
+                    "state": "unavailable",
+                    "resumable": False,
+                    "updated_at": "2026-08-24T10:05:00Z",
+                }
+            )
+        )
+
+        self.assertFalse(outcome["stale"])
+        self.assertEqual(outcome["decision"], "watch")
+        self.assertNotIn(
+            "replace-task", [effect["effect"] for effect in outcome["requested_effects"]]
+        )
+        self.assertEqual(
+            outcome["requested_effects"][-1],
+            {
+                "effect": "watch-repository-checks",
+                "pull_request": "https://example.test/pulls/18",
+                "head_commit": "abc123",
+            },
+        )
+
+    def test_watch_notifies_only_meaningful_transitions(self) -> None:
+        snapshot = active_work_snapshot(
+            {
+                "id": "task-8",
+                "issue": 8,
+                "state": "running",
+                "resumable": True,
+                "native_wait": {"after_cursor": "task-event-17"},
+                "updated_at": "2026-08-24T10:00:00Z",
+            }
+        )
+        snapshot["events"] = [
+            {
+                "kind": "checks",
+                "state": "pending",
+                "cursor": "task-event-17",
+            },
+            {
+                "kind": "heartbeat",
+                "elapsed_seconds": 3600,
+                "cursor": "task-event-18",
+            },
+            {"kind": "checks", "state": "failed", "cursor": "task-event-19"},
+        ]
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(
+            outcome["notifications"],
+            [{"transition": "checks", "state": "failed"}],
+        )
+        self.assertEqual(
+            outcome["requested_effects"][-2]["after_cursor"], "task-event-19"
+        )
+
+        snapshot["tasks"][0]["native_wait"]["after_cursor"] = "task-event-19"
+        replayed = run_scenario(snapshot)
+
+        self.assertEqual(replayed["notifications"], [])
+
+    def test_ambiguous_branch_or_pull_request_evidence_stops_recovery(self) -> None:
+        snapshot = active_work_snapshot(
+            {
+                "id": "task-8",
+                "issue": 8,
+                "state": "unavailable",
+                "resumable": False,
+                "updated_at": "2026-08-24T10:05:00Z",
+            }
+        )
+        snapshot["observed_at"] = "2026-08-24T10:07:00Z"
+        snapshot["repository"]["branches"].append(
+            {
+                "issue": 8,
+                "name": "feat/issue-8-competing",
+                "head_commit": "def456",
+                "updated_at": "2026-08-24T10:06:00Z",
+            }
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "wait")
+        self.assertEqual(outcome["lifecycle_state"], "waiting")
+        self.assertEqual(outcome["checkpoint"]["attempt"], 1)
+        self.assertEqual(
+            outcome["checkpoint"]["branch"], "feat/issue-8-durable-recovery"
+        )
+        self.assertEqual(
+            outcome["checkpoint"]["blocker"],
+            "multiple implementation branches or pull requests prevent safe recovery",
+        )
+        self.assertNotIn(
+            "replace-task", [effect["effect"] for effect in outcome["requested_effects"]]
+        )
+
     def test_fresh_task_recovers_ready_programme_from_tracker_without_chat(self) -> None:
         outcome = run_scenario(durable_snapshot(checkpoint()))
 

@@ -125,6 +125,7 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             reconciled[field] = live_value
         reconciled["updated_at"] = updated_at
 
+    task = None
     live_tasks = [task for task in snapshot["tasks"] if task["issue"] == ticket["issue"]]
     if live_tasks:
         task = max(
@@ -135,8 +136,9 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         task_evidence = {
             "state": task_state,
             "task_id": task["id"],
-            "branch": task.get("branch"),
         }
+        if task.get("branch") is not None:
+            task_evidence["branch"] = task["branch"]
         if task_state == "waiting":
             task_evidence.update(
                 {
@@ -165,6 +167,7 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         )
         apply_newer({"branch": branch["name"]}, branch["updated_at"])
 
+    pull_request = None
     live_pull_requests = [
         pull_request
         for pull_request in snapshot["pull_requests"]
@@ -244,6 +247,153 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             {"field": "state", "resolution": "live-evidence-required"}
         )
 
+    repository_progress = any(
+        branch.get("head_commit") for branch in live_branches
+    ) or any(pull_request.get("head_commit") for pull_request in live_pull_requests)
+    stale = bool(
+        task is not None
+        and task["state"] in {"lost", "unavailable"}
+        and task.get("resumable") is False
+        and not repository_progress
+    )
+
+    decision = "recover"
+    notifications = []
+    watch_cursor = (
+        task.get("native_wait", {}).get("after_cursor")
+        if task is not None
+        else None
+    )
+    meaningful_transitions = {
+        "lifecycle",
+        "blocker",
+        "pull_request",
+        "checks",
+        "verification",
+    }
+    events = snapshot.get("events", [])
+    unseen_events = events
+    if watch_cursor is not None:
+        for index, event in enumerate(events):
+            if event.get("cursor") == watch_cursor:
+                unseen_events = events[index + 1 :]
+    for event in unseen_events:
+        if event.get("kind") in meaningful_transitions:
+            notification = {"transition": event["kind"]}
+            if "state" in event:
+                notification["state"] = event["state"]
+            notifications.append(notification)
+        if event.get("cursor") is not None:
+            watch_cursor = event["cursor"]
+    recovery_effect = None
+    failure_is_current = (
+        task is not None
+        and task["state"] == "failed"
+        and task["id"] == checkpoint["task_id"]
+        and parse_timestamp(task["updated_at"])
+        >= parse_timestamp(checkpoint["updated_at"])
+    )
+    task_cannot_resume = bool(
+        task is not None
+        and task["state"] in {"failed", "lost", "unavailable"}
+        and task.get("resumable") is False
+    )
+    duplicate_work = len(live_branches) > 1 or len(live_pull_requests) > 1
+    def record_transition(evidence: Dict[str, Any]) -> None:
+        observed_at = snapshot.get("observed_at", task["updated_at"])
+        parse_timestamp(observed_at)
+        reconciled.update(evidence)
+        reconciled["updated_at"] = observed_at
+
+    if duplicate_work and (failure_is_current or task_cannot_resume):
+        record_transition(
+            {
+                "state": "waiting",
+                "branch": checkpoint["branch"],
+                "pull_request": checkpoint["pull_request"],
+                "attempt": checkpoint["attempt"],
+                "blocker": (
+                    "multiple implementation branches or pull requests "
+                    "prevent safe recovery"
+                ),
+                "next_action": "resolve duplicate branch or pull-request evidence",
+            }
+        )
+        decision = "wait"
+        notifications.append({"transition": "blocker", "state": "waiting"})
+    elif (
+        failure_is_current
+        and checkpoint["attempt"] == 1
+        and task.get("resumable") is True
+    ):
+        record_transition(
+            {
+                "state": "active",
+                "attempt": 2,
+                "blocker": None,
+                "next_action": f"resume {task['id']}",
+            }
+        )
+        decision = "recover-task"
+        recovery_effect = {
+            "effect": "resume-task",
+            "task_id": task["id"],
+            "issue": ticket["issue"],
+            "reuse": {
+                "checkpoint_comment": comment["id"],
+                "branch": reconciled["branch"],
+                "pull_request": reconciled["pull_request"],
+            },
+        }
+        notifications.append({"transition": "recovery-attempt", "attempt": 2})
+    elif (
+        (failure_is_current or stale)
+        and checkpoint["attempt"] == 1
+        and task.get("resumable") is False
+    ):
+        record_transition(
+            {
+                "state": "active",
+                "task_id": None,
+                "attempt": 2,
+                "blocker": None,
+                "next_action": "await replacement task",
+            }
+        )
+        decision = "replace-task"
+        recovery_effect = {
+            "effect": "replace-task",
+            "router": "ask-matt",
+            "workflow": "/implement",
+            "issue": ticket["issue"],
+            "replaces_task": task["id"],
+            "attempt": 2,
+            "reuse": {
+                "checkpoint_comment": comment["id"],
+                "branch": reconciled["branch"],
+                "pull_request": reconciled["pull_request"],
+            },
+            "create_branch": False,
+            "create_pull_request": False,
+        }
+        notifications.append({"transition": "recovery-attempt", "attempt": 2})
+    elif (failure_is_current or stale) and checkpoint["attempt"] >= 2:
+        record_transition(
+            {
+                "state": "waiting",
+                "blocker": task.get(
+                    "blocker", "task is unavailable and cannot resume"
+                ),
+                "next_action": task.get(
+                    "next_action", "request human intervention"
+                ),
+            }
+        )
+        decision = "wait"
+        notifications.append(
+            {"transition": "recovery-exhausted", "attempt": checkpoint["attempt"]}
+        )
+
     requested_effects = []
     if reconciled != checkpoint:
         requested_effects.append(
@@ -254,14 +404,54 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
 
+    if recovery_effect is not None:
+        requested_effects.append(recovery_effect)
+
+    if task is not None and task["state"] in {"running", "active"}:
+        native_wait = task.get("native_wait")
+        if native_wait is not None:
+            decision = "watch"
+            requested_effects.append(
+                {
+                    "effect": "wait-task",
+                    "task_id": task["id"],
+                    "after_cursor": watch_cursor,
+                }
+            )
+            if pull_request is not None:
+                requested_effects.append(
+                    {
+                        "effect": "watch-repository-checks",
+                        "pull_request": pull_request["url"],
+                        "head_commit": pull_request.get("head_commit"),
+                    }
+                )
+    elif (
+        decision == "recover"
+        and task is not None
+        and task["state"] in {"lost", "unavailable"}
+        and repository_progress
+        and pull_request is not None
+    ):
+        decision = "watch"
+        requested_effects.append(
+            {
+                "effect": "watch-repository-checks",
+                "pull_request": pull_request["url"],
+                "head_commit": pull_request.get("head_commit"),
+            }
+        )
+
     return {
-        "decision": "recover",
+        "decision": decision,
         "programme": programme["issue"],
         "ticket": ticket["issue"],
         "lifecycle_state": reconciled["state"],
         "checkpoint_comment": comment["id"],
         "checkpoint": reconciled,
         "conflicts": conflicts,
+        "notifications": notifications,
+        "stale": stale,
         "root_mutation_permitted": False,
         "requested_effects": requested_effects,
     }
