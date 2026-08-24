@@ -7,7 +7,7 @@ Agent skills published by Lightfast. Compatible with the [Agent Skills](https://
 | Skill | Purpose |
 |---|---|
 | [`manage-public-presence`](skills/manage-public-presence/) | Audit and manage controlled public identity across websites, source hosts, registries, profiles, search systems, and AI retrieval. |
-| [`orchestrate`](skills/orchestrate/) | Select one ready programme ticket and produce a bounded Ask Matt delegation from a coordination-only root task. |
+| [`orchestrate`](skills/orchestrate/) | Recover one programme from durable evidence and coordinate its next bounded action from a read-only root task. |
 
 ## Install
 
