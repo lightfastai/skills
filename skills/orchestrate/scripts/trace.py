@@ -94,6 +94,7 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     conflicts = []
     completion_proven = False
     completion_commit = None
+    closure_evidence = None
 
     def apply_newer(evidence: Dict[str, Any], updated_at: str) -> None:
         checkpoint_updated_at = reconciled["updated_at"]
@@ -210,6 +211,14 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         ):
             completion_proven = True
             completion_commit = verified_commit
+            closure_evidence = {
+                "pull_request": pull_request["url"],
+                "merge_commit": pull_request.get("merge_commit"),
+                "verified_main_commit": verified_commit,
+                "verification_evidence_recorded": True,
+                "acceptance_criteria_checked": True,
+                "issue_closed": True,
+            }
             done_at = max(
                 (
                     pull_request["updated_at"],
@@ -407,7 +416,202 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     if recovery_effect is not None:
         requested_effects.append(recovery_effect)
 
-    if task is not None and task["state"] in {"running", "active"}:
+    delivery_gates = None
+    child_merge_authorized = False
+    delivered_open = bool(
+        pull_request is not None
+        and pull_request.get("delivered") is True
+        and pull_request["state"] == "open"
+    )
+    delivered_merged = bool(
+        pull_request is not None
+        and pull_request.get("delivered") is True
+        and pull_request["state"] == "merged"
+        and is_commit(pull_request.get("merge_commit"))
+    )
+    main = snapshot["repository"].get("main", {})
+    failed_verification = main.get("verification", {})
+    failure_matches_merge = bool(
+        delivered_merged
+        and failed_verification.get("commit")
+        == pull_request.get("merge_commit")
+        and failed_verification.get("state") == "failed"
+        and failed_verification.get("evidence_recorded") is True
+    )
+    failure_is_current = failure_matches_merge and (
+        main.get("verified_at") is None
+        or parse_timestamp(failed_verification["observed_at"])
+        >= parse_timestamp(main["verified_at"])
+    )
+
+    if delivered_open:
+        current_checks = pull_request.get("required_checks", [])
+        checks_state = (
+            "unknown"
+            if "required_checks" not in pull_request
+            else "failed"
+            if any(check.get("state") == "failed" for check in current_checks)
+            else "passed"
+            if all(check.get("state") == "passed" for check in current_checks)
+            else "pending"
+        )
+        review = pull_request.get("review", {})
+        review_state = (
+            "unknown"
+            if "review" not in pull_request
+            else "required"
+            if review.get("required") is True and review.get("approved") is not True
+            else "passed"
+        )
+        branch_state = (
+            "unknown"
+            if not is_commit(pull_request.get("head_commit"))
+            or pull_request.get("mergeable") is None
+            else "passed"
+            if pull_request.get("mergeable") is True
+            else "conflicting"
+        )
+        permitted_methods = snapshot["repository"].get("merge_policy", {}).get(
+            "permitted_methods", []
+        )
+        supported_methods = snapshot["repository"].get(
+            "supported_merge_methods", []
+        )
+        merge_method = next(
+            (
+                method
+                for method in permitted_methods
+                if method in supported_methods
+            ),
+            None,
+        )
+        delivery_gates = {
+            "acceptance": (
+                "passed"
+                if ticket.get("acceptance_criteria_checked") is True
+                else "failed"
+            ),
+            "review": review_state,
+            "checks": checks_state,
+            "branch": branch_state,
+            "merge_policy": "passed" if merge_method is not None else "unsupported",
+        }
+        if all(state == "passed" for state in delivery_gates.values()):
+            decision = "merge"
+            requested_effects.append(
+                {
+                    "effect": "merge-pull-request",
+                    "pull_request": pull_request["url"],
+                    "head_commit": pull_request.get("head_commit"),
+                    "method": merge_method,
+                    "actor": "root-orchestrator",
+                }
+            )
+        else:
+            decision = "wait"
+    elif failure_is_current:
+        verification = failed_verification
+        reconciled.update(
+            {
+                "state": "waiting",
+                "verified_commit": None,
+                "blocker": "merged main verification failed",
+                "next_action": (
+                    "repair merged main and rerun independent verification"
+                ),
+                "updated_at": verification["observed_at"],
+            }
+        )
+        decision = "wait"
+        if not any(
+            effect["effect"] == "update-checkpoint"
+            for effect in requested_effects
+        ):
+            requested_effects.insert(
+                0,
+                {
+                    "effect": "update-checkpoint",
+                    "comment_id": comment["id"],
+                    "checkpoint": reconciled,
+                },
+            )
+    elif delivered_merged and main.get("verified_commit") != pull_request.get(
+        "merge_commit"
+    ):
+        decision = "verify-main"
+        requested_effects.append(
+            {
+                "effect": "verify-main",
+                "branch": "main",
+                "commit": pull_request.get("merge_commit"),
+                "independent": True,
+            }
+        )
+    elif (
+        delivered_merged
+        and main.get("verified_commit") == pull_request.get("merge_commit")
+        and main.get("verification_evidence_recorded")
+        is True
+        and ticket.get("acceptance_criteria_checked") is True
+        and ticket["state"] == "open"
+    ):
+        decision = "close-ticket"
+        requested_effects.append(
+            {
+                "effect": "close-ticket",
+                "issue": ticket["issue"],
+                "closure_evidence": {
+                    "pull_request": pull_request["url"],
+                    "merge_commit": pull_request.get("merge_commit"),
+                    "verified_main_commit": main["verified_commit"],
+                    "verification_evidence_recorded": True,
+                    "acceptance_criteria_checked": True,
+                },
+            }
+        )
+
+    if completion_proven:
+        decision = "done"
+        workspace = next(
+            (
+                candidate
+                for candidate in snapshot.get("workspaces", [])
+                if candidate.get("issue") == ticket["issue"]
+                and candidate.get("state") == "isolated"
+                and candidate.get("branch") == reconciled.get("branch")
+            ),
+            None,
+        )
+        remote_branch = next(
+            (
+                candidate
+                for candidate in live_branches
+                if candidate.get("name") == reconciled.get("branch")
+                and is_commit(candidate.get("remote_commit"))
+                and candidate.get("remote_commit")
+                == pull_request.get("head_commit")
+            ),
+            None,
+        )
+        if workspace is not None and remote_branch is not None:
+            requested_effects.append(
+                {
+                    "effect": "release-workspace",
+                    "issue": ticket["issue"],
+                    "branch": workspace["branch"],
+                    "proof": {
+                        "remote_commit": remote_branch["remote_commit"],
+                        "merged_commit": pull_request.get("merge_commit"),
+                        "verified_main_commit": completion_commit,
+                    },
+                }
+            )
+
+    if (
+        delivery_gates is None
+        and task is not None
+        and task["state"] in {"running", "active"}
+    ):
         native_wait = task.get("native_wait")
         if native_wait is not None:
             decision = "watch"
@@ -449,9 +653,12 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         "lifecycle_state": reconciled["state"],
         "checkpoint_comment": comment["id"],
         "checkpoint": reconciled,
+        "closure_evidence": closure_evidence,
         "conflicts": conflicts,
         "notifications": notifications,
         "stale": stale,
+        "delivery_gates": delivery_gates,
+        "child_merge_authorized": child_merge_authorized,
         "root_mutation_permitted": False,
         "requested_effects": requested_effects,
     }

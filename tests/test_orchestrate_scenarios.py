@@ -197,7 +197,442 @@ def active_work_snapshot(task: dict, **overrides: object) -> dict:
     return snapshot
 
 
+def delivered_work_snapshot(**overrides: object) -> dict:
+    snapshot = active_work_snapshot(
+        {
+            "id": "task-8",
+            "issue": 8,
+            "state": "delivered",
+            "resumable": True,
+            "updated_at": "2026-08-24T10:08:00Z",
+        }
+    )
+    snapshot["observed_at"] = "2026-08-24T10:09:00Z"
+    snapshot["repository"].update(
+        {
+            "merge_policy": {"permitted_methods": ["squash", "merge"]},
+            "supported_merge_methods": ["merge", "squash", "rebase"],
+        }
+    )
+    snapshot["repository"]["branches"][0].update(
+        {"remote_commit": "abc123", "state": "clean"}
+    )
+    snapshot["pull_requests"][0].update(
+        {
+            "delivered": True,
+            "required_checks": [{"name": "test", "state": "passed"}],
+            "review": {"required": False, "approved": False},
+            "mergeable": True,
+        }
+    )
+    current_ticket = next(
+        ticket for ticket in snapshot["tracker"]["tickets"] if ticket["issue"] == 8
+    )
+    current_ticket["acceptance_criteria_checked"] = True
+    snapshot["workspaces"] = [
+        {
+            "issue": 8,
+            "branch": "feat/issue-8-durable-recovery",
+            "state": "isolated",
+        }
+    ]
+    for key, value in overrides.items():
+        snapshot[key] = value
+    return snapshot
+
+
 class OrchestrateScenarios(unittest.TestCase):
+    def test_pending_required_check_prevents_merge(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["pull_requests"][0]["required_checks"][0]["state"] = "pending"
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "wait")
+        self.assertEqual(outcome["delivery_gates"]["checks"], "pending")
+        self.assertFalse(outcome["child_merge_authorized"])
+        self.assertNotIn(
+            "merge-pull-request",
+            [effect["effect"] for effect in outcome["requested_effects"]],
+        )
+
+    def test_merged_pull_request_requires_independent_main_verification(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["pull_requests"][0].update(
+            {
+                "state": "merged",
+                "merge_commit": "merged456",
+                "updated_at": "2026-08-24T10:10:00Z",
+            }
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "verify-main")
+        self.assertIn(
+            {
+                "effect": "verify-main",
+                "branch": "main",
+                "commit": "merged456",
+                "independent": True,
+            },
+            outcome["requested_effects"],
+        )
+        self.assertNotIn(
+            "release-workspace",
+            [effect["effect"] for effect in outcome["requested_effects"]],
+        )
+
+    def test_failed_main_verification_records_waiting_without_closure(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["pull_requests"][0].update(
+            {
+                "state": "merged",
+                "merge_commit": "merged456",
+                "updated_at": "2026-08-24T10:10:00Z",
+            }
+        )
+        snapshot["repository"]["main"] = {
+            "verified_commit": None,
+            "verification": {
+                "commit": "merged456",
+                "state": "failed",
+                "evidence_recorded": True,
+                "observed_at": "2026-08-24T10:11:00Z",
+            },
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "wait")
+        self.assertEqual(outcome["lifecycle_state"], "waiting")
+        self.assertEqual(
+            outcome["checkpoint"]["blocker"],
+            "merged main verification failed",
+        )
+        self.assertEqual(
+            outcome["checkpoint"]["next_action"],
+            "repair merged main and rerun independent verification",
+        )
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "update-checkpoint",
+                    "comment_id": "checkpoint-comment-8",
+                    "checkpoint": outcome["checkpoint"],
+                }
+            ],
+        )
+
+    def test_verified_merged_work_requests_full_evidence_ticket_closure(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["pull_requests"][0].update(
+            {
+                "state": "merged",
+                "merge_commit": "merged456",
+                "updated_at": "2026-08-24T10:10:00Z",
+            }
+        )
+        snapshot["repository"]["main"] = {
+            "verified_commit": "merged456",
+            "verified_at": "2026-08-24T10:11:00Z",
+            "verification_evidence_recorded": True,
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "close-ticket")
+        self.assertEqual(outcome["lifecycle_state"], "active")
+        self.assertEqual(outcome["checkpoint"]["verified_commit"], "merged456")
+        self.assertIn(
+            {
+                "effect": "close-ticket",
+                "issue": 8,
+                "closure_evidence": {
+                    "pull_request": "https://example.test/pulls/18",
+                    "merge_commit": "merged456",
+                    "verified_main_commit": "merged456",
+                    "verification_evidence_recorded": True,
+                    "acceptance_criteria_checked": True,
+                },
+            },
+            outcome["requested_effects"],
+        )
+        self.assertNotIn(
+            "release-workspace",
+            [effect["effect"] for effect in outcome["requested_effects"]],
+        )
+
+    def test_done_records_closure_and_releases_only_proven_workspace(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["pull_requests"][0].update(
+            {
+                "state": "merged",
+                "merge_commit": "merged456",
+                "updated_at": "2026-08-24T10:10:00Z",
+            }
+        )
+        snapshot["repository"]["main"] = {
+            "verified_commit": "merged456",
+            "verified_at": "2026-08-24T10:11:00Z",
+            "verification_evidence_recorded": True,
+        }
+        current_ticket = next(
+            ticket
+            for ticket in snapshot["tracker"]["tickets"]
+            if ticket["issue"] == 8
+        )
+        current_ticket.update(
+            {"state": "closed", "closed_at": "2026-08-24T10:12:00Z"}
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "done")
+        self.assertEqual(outcome["lifecycle_state"], "done")
+        self.assertEqual(outcome["checkpoint"]["verified_commit"], "merged456")
+        self.assertEqual(
+            outcome["closure_evidence"],
+            {
+                "pull_request": "https://example.test/pulls/18",
+                "merge_commit": "merged456",
+                "verified_main_commit": "merged456",
+                "verification_evidence_recorded": True,
+                "acceptance_criteria_checked": True,
+                "issue_closed": True,
+            },
+        )
+        self.assertIn(
+            {
+                "effect": "release-workspace",
+                "issue": 8,
+                "branch": "feat/issue-8-durable-recovery",
+                "proof": {
+                    "remote_commit": "abc123",
+                    "merged_commit": "merged456",
+                    "verified_main_commit": "merged456",
+                },
+            },
+            outcome["requested_effects"],
+        )
+
+    def test_each_failed_delivery_gate_independently_prevents_merge(self) -> None:
+        scenarios = {
+            "failing-check": (
+                lambda snapshot: snapshot["pull_requests"][0][
+                    "required_checks"
+                ][0].update({"state": "failed"}),
+                ("checks", "failed"),
+            ),
+            "acceptance": (
+                lambda snapshot: next(
+                    ticket
+                    for ticket in snapshot["tracker"]["tickets"]
+                    if ticket["issue"] == 8
+                ).update({"acceptance_criteria_checked": False}),
+                ("acceptance", "failed"),
+            ),
+            "review": (
+                lambda snapshot: snapshot["pull_requests"][0].update(
+                    {"review": {"required": True, "approved": False}}
+                ),
+                ("review", "required"),
+            ),
+            "conflict": (
+                lambda snapshot: snapshot["pull_requests"][0].update(
+                    {"mergeable": False}
+                ),
+                ("branch", "conflicting"),
+            ),
+            "unsupported-method": (
+                lambda snapshot: snapshot["repository"].update(
+                    {"supported_merge_methods": ["rebase"]}
+                ),
+                ("merge_policy", "unsupported"),
+            ),
+        }
+
+        for name, (mutate, expected_gate) in scenarios.items():
+            with self.subTest(name=name):
+                snapshot = delivered_work_snapshot()
+                mutate(snapshot)
+
+                outcome = run_scenario(snapshot)
+
+                gate, state = expected_gate
+                self.assertEqual(outcome["decision"], "wait")
+                self.assertEqual(outcome["delivery_gates"][gate], state)
+                self.assertNotIn(
+                    "merge-pull-request",
+                    [
+                        effect["effect"]
+                        for effect in outcome["requested_effects"]
+                    ],
+                )
+
+    def test_ready_delivery_uses_first_permitted_supported_merge_method(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["repository"]["merge_policy"]["permitted_methods"] = [
+            "rebase",
+            "squash",
+        ]
+        snapshot["repository"]["supported_merge_methods"] = ["squash", "merge"]
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "merge")
+        self.assertEqual(
+            outcome["delivery_gates"],
+            {
+                "acceptance": "passed",
+                "review": "passed",
+                "checks": "passed",
+                "branch": "passed",
+                "merge_policy": "passed",
+            },
+        )
+        self.assertFalse(outcome["child_merge_authorized"])
+        self.assertIn(
+            {
+                "effect": "merge-pull-request",
+                "pull_request": "https://example.test/pulls/18",
+                "head_commit": "abc123",
+                "method": "squash",
+                "actor": "root-orchestrator",
+            },
+            outcome["requested_effects"],
+        )
+
+    def test_done_does_not_release_workspace_without_remote_commit_proof(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["repository"]["branches"][0].pop("remote_commit")
+        snapshot["pull_requests"][0].update(
+            {
+                "state": "merged",
+                "merge_commit": "merged456",
+                "updated_at": "2026-08-24T10:10:00Z",
+            }
+        )
+        snapshot["repository"]["main"] = {
+            "verified_commit": "merged456",
+            "verified_at": "2026-08-24T10:11:00Z",
+            "verification_evidence_recorded": True,
+        }
+        current_ticket = next(
+            ticket
+            for ticket in snapshot["tracker"]["tickets"]
+            if ticket["issue"] == 8
+        )
+        current_ticket.update(
+            {"state": "closed", "closed_at": "2026-08-24T10:12:00Z"}
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["lifecycle_state"], "done")
+        self.assertNotIn(
+            "release-workspace",
+            [effect["effect"] for effect in outcome["requested_effects"]],
+        )
+
+    def test_unknown_gate_evidence_and_missing_head_prevent_merge(self) -> None:
+        scenarios = {
+            "checks": (
+                lambda snapshot: snapshot["pull_requests"][0].pop(
+                    "required_checks"
+                ),
+                ("checks", "unknown"),
+            ),
+            "review": (
+                lambda snapshot: snapshot["pull_requests"][0].pop("review"),
+                ("review", "unknown"),
+            ),
+            "head": (
+                lambda snapshot: snapshot["pull_requests"][0].pop(
+                    "head_commit"
+                ),
+                ("branch", "unknown"),
+            ),
+        }
+
+        for name, (mutate, expected_gate) in scenarios.items():
+            with self.subTest(name=name):
+                snapshot = delivered_work_snapshot()
+                mutate(snapshot)
+
+                outcome = run_scenario(snapshot)
+
+                gate, state = expected_gate
+                self.assertEqual(outcome["decision"], "wait")
+                self.assertEqual(outcome["delivery_gates"][gate], state)
+                self.assertNotIn(
+                    "merge-pull-request",
+                    [
+                        effect["effect"]
+                        for effect in outcome["requested_effects"]
+                    ],
+                )
+
+    def test_newer_successful_verification_wins_over_stale_failure(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["pull_requests"][0].update(
+            {
+                "state": "merged",
+                "merge_commit": "merged456",
+                "updated_at": "2026-08-24T10:10:00Z",
+            }
+        )
+        snapshot["repository"]["main"] = {
+            "verified_commit": "merged456",
+            "verified_at": "2026-08-24T10:12:00Z",
+            "verification_evidence_recorded": True,
+            "verification": {
+                "commit": "merged456",
+                "state": "failed",
+                "evidence_recorded": True,
+                "observed_at": "2026-08-24T10:11:00Z",
+            },
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "close-ticket")
+        self.assertEqual(outcome["lifecycle_state"], "active")
+        self.assertIsNone(outcome["checkpoint"]["blocker"])
+
+    def test_workspace_release_proof_must_match_the_workspace_branch(self) -> None:
+        snapshot = delivered_work_snapshot()
+        snapshot["workspaces"][0]["branch"] = "feat/unrelated"
+        snapshot["pull_requests"][0].update(
+            {
+                "state": "merged",
+                "merge_commit": "merged456",
+                "updated_at": "2026-08-24T10:10:00Z",
+            }
+        )
+        snapshot["repository"]["main"] = {
+            "verified_commit": "merged456",
+            "verified_at": "2026-08-24T10:11:00Z",
+            "verification_evidence_recorded": True,
+        }
+        current_ticket = next(
+            ticket
+            for ticket in snapshot["tracker"]["tickets"]
+            if ticket["issue"] == 8
+        )
+        current_ticket.update(
+            {"state": "closed", "closed_at": "2026-08-24T10:12:00Z"}
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["lifecycle_state"], "done")
+        self.assertNotIn(
+            "release-workspace",
+            [effect["effect"] for effect in outcome["requested_effects"]],
+        )
+
     def test_active_work_uses_native_waits_without_noisy_notification(self) -> None:
         outcome = run_scenario(
             active_work_snapshot(
