@@ -440,6 +440,14 @@ class OrchestrateScenarios(unittest.TestCase):
             outcome["notifications"],
             [{"transition": "checks", "state": "failed"}],
         )
+        self.assertEqual(
+            outcome["requested_effects"][-2]["after_cursor"], "task-event-19"
+        )
+
+        snapshot["tasks"][0]["native_wait"]["after_cursor"] = "task-event-19"
+        replayed = run_scenario(snapshot)
+
+        self.assertEqual(replayed["notifications"], [])
 
     def test_ambiguous_branch_or_pull_request_evidence_stops_recovery(self) -> None:
         snapshot = active_work_snapshot(

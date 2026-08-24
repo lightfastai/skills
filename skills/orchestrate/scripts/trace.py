@@ -271,9 +271,13 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         "checks",
         "verification",
     }
-    for event in snapshot.get("events", []):
-        if event.get("cursor") == watch_cursor:
-            continue
+    events = snapshot.get("events", [])
+    unseen_events = events
+    if watch_cursor is not None:
+        for index, event in enumerate(events):
+            if event.get("cursor") == watch_cursor:
+                unseen_events = events[index + 1 :]
+    for event in unseen_events:
         if event.get("kind") in meaningful_transitions:
             notification = {"transition": event["kind"]}
             if "state" in event:
