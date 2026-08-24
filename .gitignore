@@ -1,18 +1,6 @@
 node_modules/
-
-# Generated BAML clients
-skills/**/baml_client/
-skills/**/baml_client_dist/
-
-# Local eval outputs
-skills/**/evals/runs/
-
-# Local environment files
+.DS_Store
+*.log
 .env
 .env.local
 .env.*.local
-
-# Local OS and tooling noise
-.DS_Store
-*.log
-.tmp-baml-client-tsconfig.json
