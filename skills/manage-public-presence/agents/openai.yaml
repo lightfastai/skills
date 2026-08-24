@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Public Presence"
+  short_description: "Resume and manage controlled public identity"
+  default_prompt: "Use $manage-public-presence to resume our existing public-presence control plane, audit live state, and continue only the authorized work."
