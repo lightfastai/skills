@@ -16,9 +16,39 @@ npx skills add lightfastai/skills --skill manage-public-presence
 npx skills add lightfastai/skills --skill orchestrate
 ```
 
+## Orchestrate: first run
+
+`orchestrate` is a coordination skill, not an implementation agent. Its root
+task remains read-only: it recovers durable programme state, chooses one valid
+transition, and routes one bounded task through Ask Matt to the appropriate
+installed specialist skill.
+
+On first run, it reads the repository instructions and the local repository
+contract at `docs/agents/orchestrate.md`, then reconciles the configured
+tracker, one versioned ticket checkpoint, task state, branches, pull requests,
+checks, and independently verified main. If the minimum resumable control plane
+is incomplete, it reports bounded bootstrap or migration proposals instead of
+editing the repository or inventing a fixed template. Runtime state stays in
+the tracker, not in the repository contract.
+
+Use a dry run to inspect the same recovered evidence and proposed transition
+without requesting the delegation or any other effect.
+
+The coordination boundary also applies to integrations and approvals.
+Provider commands are resolved through repository configuration and installed
+approved skills; they are not bundled into `orchestrate`. Credentials, broad
+permissions, destructive actions, legal or billing actions, unverified
+publishers, paid model runs, persistent external changes, and material scope
+expansion pause until the exact bounded approval is recorded.
+
 ## Security
 
-Published skill content must remain provider-independent and contain no credentials, private identifiers, internal URLs, unpublished principal data, or copied provider responses. Operational outputs should minimize and mask sensitive metadata by default.
+Published skill content must contain no credentials, private identifiers,
+internal URLs, unpublished principal data, or copied provider responses. The
+generic `orchestrate` kernel must additionally remain provider-independent;
+provider-aware skills may describe only the public integrations required by
+their declared purpose. Operational outputs should minimize and mask sensitive
+metadata by default.
 
 ## License
 
