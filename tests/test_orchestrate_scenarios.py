@@ -7,6 +7,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TRACER = ROOT / "skills" / "orchestrate" / "scripts" / "trace.py"
+POLICY_APPROVAL_GATES = (
+    "credentials",
+    "broad_permissions",
+    "destructive_action",
+    "legal_terms",
+    "billing",
+    "unverified_publisher",
+    "material_scope_expansion",
+)
 
 
 def run_scenario(snapshot: dict) -> dict:
@@ -1070,6 +1079,49 @@ class OrchestrateScenarios(unittest.TestCase):
             "checkpoint-comment-8",
         )
 
+    def test_active_work_hard_gate_updates_existing_checkpoint_before_action(
+        self,
+    ) -> None:
+        snapshot = active_work_snapshot(
+            {
+                "id": "task-8",
+                "issue": 8,
+                "state": "running",
+                "resumable": True,
+                "native_wait": {"after_cursor": "task-event-17"},
+                "updated_at": "2026-08-24T10:05:00Z",
+            }
+        )
+        snapshot["observed_at"] = "2026-08-24T10:06:00Z"
+        current_ticket = snapshot["tracker"]["tickets"][1]
+        current_ticket["gates"] = {
+            "credentials": {"scope": {"credential": "private-name"}}
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "wait")
+        self.assertEqual(outcome["lifecycle_state"], "waiting")
+        self.assertEqual(
+            outcome["checkpoint"]["blocker"],
+            "credential access requires explicit approval",
+        )
+        self.assertEqual(
+            outcome["checkpoint"]["next_action"],
+            "approve the credential purpose and least-privilege access scope",
+        )
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "update-checkpoint",
+                    "comment_id": "checkpoint-comment-8",
+                    "checkpoint": outcome["checkpoint"],
+                }
+            ],
+        )
+        self.assertNotIn("private-name", json.dumps(outcome))
+
     def test_newer_branch_and_pull_request_win_without_hiding_conflicts(self) -> None:
         stale = checkpoint(
             state="active",
@@ -1389,6 +1441,46 @@ class OrchestrateScenarios(unittest.TestCase):
                     "rejected",
                 )
 
+    def test_human_override_cannot_bypass_specific_policy_gates(self) -> None:
+        gated_requests = {
+            "ready_for_human": True,
+            "adr_conflict": "ADR-0007",
+            "paid_model_run": {
+                "manifest": {
+                    "models": ["model-a"],
+                    "max_calls": 2,
+                    "estimated_cost": {"amount": 1, "currency": "USD"},
+                }
+            },
+            **{
+                gate: {"scope": {"request": gate}}
+                for gate in POLICY_APPROVAL_GATES
+            },
+        }
+        for gate, request in gated_requests.items():
+            with self.subTest(gate=gate):
+                snapshot = prepared_snapshot()
+                snapshot["programme"]["approved_order"] = [42, 43]
+                snapshot["tickets"].append(
+                    {
+                        "issue": 43,
+                        "title": "Policy-gated override",
+                        "state": "ready",
+                        "blocked_by": [],
+                        "gates": {gate: request},
+                    }
+                )
+                snapshot["user_instruction"].update(
+                    {"override_issue": 43, "proceed": True}
+                )
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["selected_ticket"], 42)
+                self.assertEqual(
+                    outcome["decisive_evidence"]["human_override"], "rejected"
+                )
+
     def test_active_mutating_delivery_or_capability_task_blocks_delegation(self) -> None:
         for lane in ("delivery", "capability"):
             with self.subTest(lane=lane):
@@ -1458,8 +1550,38 @@ class OrchestrateScenarios(unittest.TestCase):
                     "issue": 42,
                     "state": "waiting",
                     "gate": "adr",
+                    "blocker": "selected work conflicts with ADR-0007",
+                    "next_action": (
+                        "approve a revision or exception to ADR-0007 before delegation"
+                    ),
                 }
             ],
+        )
+
+    def test_adr_path_is_reduced_to_a_safe_decision_identifier(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "adr_conflict": "docs/adr/0007-private-detail.md"
+        }
+
+        outcome = run_scenario(snapshot)
+
+        blocker = outcome["requested_effects"][0]
+        self.assertEqual(blocker["blocker"], "selected work conflicts with ADR-0007")
+        self.assertNotIn("private-detail", json.dumps(outcome))
+
+    def test_private_adr_like_value_is_not_copied_to_checkpoint(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "adr_conflict": "ADR-customerSecret42"
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertNotIn("customerSecret42", json.dumps(outcome))
+        self.assertEqual(
+            outcome["requested_effects"][0]["blocker"],
+            "selected work conflicts with the applicable ADR",
         )
 
     def test_selected_ticket_stops_at_safety_or_approval_gate(self) -> None:
@@ -1472,7 +1594,326 @@ class OrchestrateScenarios(unittest.TestCase):
 
                 self.assertEqual(outcome["decision"], "stop")
                 self.assertEqual(outcome["reason"], f"{gate}-gate")
-                self.assertEqual(outcome["requested_effects"], [])
+                self.assertEqual(len(outcome["requested_effects"]), 1)
+                blocker = outcome["requested_effects"][0]
+                self.assertEqual(blocker["effect"], "record-blocker")
+                self.assertEqual(blocker["state"], "waiting")
+                self.assertTrue(blocker["blocker"])
+                self.assertTrue(blocker["next_action"])
+
+    def test_ready_for_human_is_an_unconditional_durable_pause(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {"ready_for_human": True}
+        snapshot["approvals"] = {"ready_for_human": {"approved": True}}
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "ready-for-human")
+        self.assertEqual(
+            outcome["requested_effects"],
+            [
+                {
+                    "effect": "record-blocker",
+                    "issue": 42,
+                    "state": "waiting",
+                    "gate": "ready-for-human",
+                    "blocker": "ticket is labelled ready-for-human",
+                    "next_action": (
+                        "a human must complete or reclassify the ticket and "
+                        "record the decision"
+                    ),
+                }
+            ],
+        )
+
+    def test_ready_for_human_label_is_normalized_as_a_hard_pause(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["labels"] = ["ready-for-human"]
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["reason"], "ready-for-human")
+        self.assertEqual(outcome["requested_effects"][0]["state"], "waiting")
+
+    def test_paid_model_run_without_approval_and_bounded_manifest_pauses(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "paid_model_run": {
+                "manifest": {
+                    "models": ["secret-provider-model"],
+                    "estimated_cost": {"amount": 5, "currency": "USD"},
+                }
+            }
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "paid-model-approval-required")
+        blocker = outcome["requested_effects"][0]
+        self.assertEqual(blocker["gate"], "paid-model-run")
+        self.assertEqual(
+            blocker["blocker"],
+            "paid model run lacks an approved bounded manifest",
+        )
+        self.assertEqual(
+            blocker["next_action"],
+            (
+                "approve a manifest naming models, a maximum call or token "
+                "limit, and estimated cost"
+            ),
+        )
+        self.assertNotIn("secret-provider-model", json.dumps(outcome))
+
+    def test_approved_bounded_paid_model_manifest_allows_delegation(self) -> None:
+        manifest = {
+            "models": ["model-a"],
+            "max_tokens": 1000,
+            "estimated_cost": {"amount": 5, "currency": "USD"},
+        }
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "paid_model_run": {"manifest": manifest}
+        }
+        snapshot["approvals"] = {
+            "paid_model_run": {"approved": True, "manifest": manifest}
+        }
+
+        self.assertEqual(run_scenario(snapshot)["decision"], "delegate")
+
+    def test_paid_model_approval_with_insufficient_scope_pauses(self) -> None:
+        requested = {
+            "models": ["model-a", "model-b"],
+            "max_calls": 10,
+            "estimated_cost": {"amount": 5, "currency": "USD"},
+        }
+        approved = {
+            "models": ["model-a"],
+            "max_calls": 10,
+            "estimated_cost": {"amount": 5, "currency": "USD"},
+        }
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "paid_model_run": {"manifest": requested}
+        }
+        snapshot["approvals"] = {
+            "paid_model_run": {"approved": True, "manifest": approved}
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "paid-model-approval-required")
+
+    def test_paid_manifest_rejects_blank_names_and_invalid_declared_limits(
+        self,
+    ) -> None:
+        invalid_manifests = (
+            {
+                "models": ["   "],
+                "max_calls": 1,
+                "estimated_cost": {"amount": 1, "currency": "USD"},
+            },
+            {
+                "models": ["model-a"],
+                "max_calls": 1,
+                "estimated_cost": {"amount": 1, "currency": "   "},
+            },
+            {
+                "models": ["model-a"],
+                "max_calls": 1,
+                "max_tokens": -1,
+                "estimated_cost": {"amount": 1, "currency": "USD"},
+            },
+        )
+        for manifest in invalid_manifests:
+            with self.subTest(manifest=manifest):
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {
+                    "paid_model_run": {"manifest": manifest}
+                }
+                snapshot["approvals"] = {
+                    "paid_model_run": {"approved": True, "manifest": manifest}
+                }
+
+                self.assertEqual(run_scenario(snapshot)["decision"], "stop")
+
+    def test_sensitive_and_privileged_actions_require_scoped_approval(self) -> None:
+        for gate in POLICY_APPROVAL_GATES:
+            with self.subTest(gate=gate):
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {
+                    gate: {"scope": {"request": "sensitive-value"}}
+                }
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["decision"], "stop")
+                self.assertEqual(
+                    outcome["reason"],
+                    f"{gate.replace('_', '-')}-approval-required",
+                )
+                blocker = outcome["requested_effects"][0]
+                self.assertEqual(blocker["state"], "waiting")
+                self.assertTrue(blocker["blocker"])
+                self.assertTrue(blocker["next_action"])
+                self.assertNotIn("sensitive-value", json.dumps(outcome))
+
+    def test_exact_scoped_approvals_allow_privileged_actions(self) -> None:
+        for gate in POLICY_APPROVAL_GATES:
+            with self.subTest(gate=gate):
+                scope = {"request": f"approved-{gate}"}
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {gate: {"scope": scope}}
+                snapshot["approvals"] = {
+                    gate: {"approved": True, "scope": scope}
+                }
+
+                self.assertEqual(run_scenario(snapshot)["decision"], "delegate")
+
+    def test_empty_or_content_free_scope_is_not_an_approval_boundary(self) -> None:
+        for scope in (
+            {},
+            {"resources": []},
+            "all",
+            True,
+            0,
+            -1,
+            {"resources": "all"},
+        ):
+            with self.subTest(scope=scope):
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {
+                    "broad_permissions": {"scope": scope}
+                }
+                snapshot["approvals"] = {
+                    "broad_permissions": {"approved": True, "scope": scope}
+                }
+
+                outcome = run_scenario(snapshot)
+
+                self.assertEqual(outcome["decision"], "stop")
+                self.assertEqual(
+                    outcome["reason"],
+                    "broad-permissions-approval-required",
+                )
+
+    def test_non_finite_values_are_not_bounded_approval_evidence(self) -> None:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                scope = {"limit": value}
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {
+                    "billing": {"scope": scope}
+                }
+                snapshot["approvals"] = {
+                    "billing": {"approved": True, "scope": scope}
+                }
+
+                self.assertEqual(run_scenario(snapshot)["decision"], "stop")
+
+                manifest = {
+                    "models": ["model-a"],
+                    "max_calls": 1,
+                    "estimated_cost": {"amount": value, "currency": "USD"},
+                }
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {
+                    "paid_model_run": {"manifest": manifest}
+                }
+                snapshot["approvals"] = {
+                    "paid_model_run": {"approved": True, "manifest": manifest}
+                }
+
+                self.assertEqual(run_scenario(snapshot)["decision"], "stop")
+
+    def test_large_integer_bounds_remain_exact_without_numeric_overflow(self) -> None:
+        large_bound = 10**1000
+        scope = {"limit": large_bound}
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {"billing": {"scope": scope}}
+        snapshot["approvals"] = {
+            "billing": {"approved": True, "scope": scope}
+        }
+
+        self.assertEqual(run_scenario(snapshot)["decision"], "delegate")
+
+        manifest = {
+            "models": ["model-a"],
+            "max_calls": 1,
+            "estimated_cost": {"amount": large_bound, "currency": "USD"},
+        }
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "paid_model_run": {"manifest": manifest}
+        }
+        snapshot["approvals"] = {
+            "paid_model_run": {"approved": True, "manifest": manifest}
+        }
+
+        self.assertEqual(run_scenario(snapshot)["decision"], "delegate")
+
+    def test_boolean_values_cannot_match_numeric_approval_bounds(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "billing": {"scope": {"limit": 1}}
+        }
+        snapshot["approvals"] = {
+            "billing": {"approved": True, "scope": {"limit": True}}
+        }
+
+        self.assertEqual(run_scenario(snapshot)["decision"], "stop")
+
+        requested = {
+            "models": ["model-a"],
+            "max_calls": 1,
+            "estimated_cost": {"amount": 0, "currency": "USD"},
+        }
+        approved = {
+            "models": ["model-a"],
+            "max_calls": True,
+            "estimated_cost": {"amount": False, "currency": "USD"},
+        }
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "paid_model_run": {"manifest": requested}
+        }
+        snapshot["approvals"] = {
+            "paid_model_run": {"approved": True, "manifest": approved}
+        }
+
+        self.assertEqual(run_scenario(snapshot)["decision"], "stop")
+
+    def test_empty_gate_payloads_fail_closed(self) -> None:
+        for gate in ("paid_model_run", *POLICY_APPROVAL_GATES):
+            with self.subTest(gate=gate):
+                snapshot = prepared_snapshot()
+                snapshot["tickets"][0]["gates"] = {gate: {}}
+
+                self.assertEqual(run_scenario(snapshot)["decision"], "stop")
+
+    def test_general_proceed_and_narrow_approval_do_not_expand_scope(self) -> None:
+        snapshot = prepared_snapshot()
+        snapshot["tickets"][0]["gates"] = {
+            "material_scope_expansion": {
+                "scope": {"issues": [42, 43], "change": "new-service"}
+            }
+        }
+        snapshot["approvals"] = {
+            "material_scope_expansion": {
+                "approved": True,
+                "scope": {"issues": [42]},
+            }
+        }
+        snapshot["user_instruction"]["proceed"] = True
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(
+            outcome["reason"], "material-scope-expansion-approval-required"
+        )
 
     def test_mutating_delegation_requires_an_isolated_workspace(self) -> None:
         snapshot = prepared_snapshot()

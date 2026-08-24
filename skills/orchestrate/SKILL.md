@@ -176,6 +176,68 @@ is present.
 If the durable evidence does not establish an ordered dependency frontier, stop
 and report the missing or conflicting evidence instead of choosing.
 
+## Enforce policy and approval gates
+
+Evaluate policy gates before delegation and before honoring a human override.
+An instruction to proceed, continue, or override selection is not approval for
+a gated action. `ready-for-human` and an applicable ADR conflict are
+unconditional pauses: an approval entry or override cannot clear them. The
+human must complete or reclassify `ready-for-human` work, or explicitly revise
+or except the identified ADR, before the ticket may be reconsidered.
+Treat either the tracker label or normalized `gates.ready_for_human: true` as
+the same hard pause.
+Normalize ADR conflicts to the repository's canonical `ADR-NNNN` identifier;
+reduce a repository ADR path to that identifier and do not copy the path or
+title into a durable checkpoint.
+
+Require explicit scoped approval for credential access, broad permissions,
+destructive actions, legal terms, billing actions, unverified publishers, and
+material expansion beyond the selected issue. The approval must name the same
+bounded scope as the requested action; a general approval or a narrower scope
+is insufficient. Never infer expanded issue scope from a general instruction
+to proceed.
+
+Before any paid model execution, require an approved bounded manifest with all
+of:
+
+- one or more named models;
+- a positive maximum number of calls or tokens; and
+- an estimated cost amount and currency.
+
+The approved manifest must match the requested manifest. Do not execute a
+different model, a larger run, or a higher-cost run under an earlier approval.
+Normalize gate and approval evidence without provider responses or secrets:
+
+```json
+{
+  "tickets": [{
+    "issue": 42,
+    "gates": {
+      "paid_model_run": {"manifest": {
+        "models": ["model-a"], "max_calls": 10,
+        "estimated_cost": {"amount": 5, "currency": "USD"}
+      }},
+      "broad_permissions": {"scope": {"resources": ["repository"]}}
+    }
+  }],
+  "approvals": {
+    "paid_model_run": {"approved": true, "manifest": {
+      "models": ["model-a"], "max_calls": 10,
+      "estimated_cost": {"amount": 5, "currency": "USD"}
+    }},
+    "broad_permissions": {"approved": true,
+      "scope": {"resources": ["repository"]}}
+  }
+}
+```
+
+When a gate blocks execution, request `record-blocker` for the selected
+ticket's existing checkpoint comment. Update that checkpoint in place to
+`waiting` with a sanitized reason and the precise approval or policy action
+needed next. Never copy credential material, private identifiers, manifest
+details, permission targets, legal text, billing data, or raw provider
+responses into the checkpoint. Do not append a second checkpoint comment.
+
 ## Watch and recover active work
 
 Watch active work through native task waits and repository check events. Request
