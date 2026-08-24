@@ -96,6 +96,59 @@ state is absent.
 6. When reconciliation changes the checkpoint, request one update to its
    existing comment identifier. Never append a second status comment.
 
+## Bootstrap and migrate repository orchestration
+
+Before coordinating an unfamiliar repository, audit its live evidence rather
+than applying a fixed scaffold. Inspect all of: repository structure, tracker
+state, agent instructions, issue and pull-request templates, CI, security,
+deployment, data conventions, installed skills, and existing programme
+evidence. Report unavailable evidence as a gap; do not infer that an absent
+provider-specific resource is required.
+
+Reuse existing tracker, checkpoint, programme-discovery, instruction, and
+policy conventions when they already satisfy this contract. Establish only the
+missing parts of the minimum resumable control plane: a configured tracker, a
+versioned checkpoint convention, durable programme discovery, a local policy
+contract, and agent discovery of that contract. Bootstrap may audit and
+propose from the read-only root task, but it must not edit the repository,
+install a capability, or create a second runtime-state store.
+
+The canonical local policy path is `docs/agents/orchestrate.md`, and the
+repository's `AGENTS.md` must point agents to it. The local contract records:
+
+- the adopted orchestration policy version;
+- verification commands and evidence requirements;
+- active-programme discovery;
+- branch and merge policy;
+- approval limits;
+- the installed-skill and publisher allowlist;
+- roadmap-linked research topics and cadence policy; and
+- explicit repository exceptions.
+
+Keep current tickets, tasks, branches, pull requests, blockers, attempts,
+verified commits, and next actions out of the local contract. Those are runtime
+programme state and belong in the tracker checkpoint and other reconcilable
+live evidence. If runtime state is found in the policy document, report the
+contract gap without copying or silently relocating its values.
+
+Record the adopted orchestration policy version in the local contract. When no
+version is adopted, propose a reviewable adoption. When the published policy is
+newer, propose a migration that identifies the old and new versions, preserves
+repository decisions and runtime evidence, carries bounded identifiers for the
+policy changes under review, and requires explicit approval before delegated
+implementation. Corroborate the adopted version with the substantive local
+contract content; headings or a separate version claim are not enough. Never
+rewrite local policy silently, and never downgrade a repository whose adopted
+policy is newer than the installed skill.
+
+Report capability gaps as bounded proposals. A proposal is not approval. Only
+after exact bounded approval and live tracker evidence of one ready capability
+ticket may bootstrap ask Ask Matt to delegate that ticket to `/implement`,
+under the normal isolation, publisher/provenance, active-task, TDD, review,
+commit, and pull-request gates. Normalize gap reasons in operational output
+rather than reproducing free-form evidence. Apply at most one such mutating
+delegation and never apply or install it in the root task.
+
 ## Verify, merge, and close delivered work
 
 Treat a child pull request as a handoff, never as authority to merge. Child
