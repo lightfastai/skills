@@ -26,16 +26,9 @@ programme state, chooses one valid transition, and routes one bounded task
 through Ask Matt.
 
 On first run, it reads the authority home's instructions and orchestration
-registry, then loads only the selected charter and shared policy. The registry
-owns registration and resource claims; the charter owns purpose, programme
-discovery, routes, controls, and completion; the configured tracker owns live
-state. Missing or ambiguous authority produces one bounded adoption proposal,
-not an inferred mutation.
-
-An instance is `charter_id + programme_id`. Draft charters remain proposal-only.
-Registered writers may overlap only when resource claims and concurrency permit
-it. Meta observation requires bilateral opt-in, and one experiment assignment
-stays fixed for its selected work unit.
+registry, then loads only the selected charter and shared policy. The configured
+tracker remains the source of live state. Missing or ambiguous authority
+produces one bounded adoption proposal.
 
 Use a dry run to inspect the same recovered evidence and proposed transition
 without requesting the delegation or any other effect.
