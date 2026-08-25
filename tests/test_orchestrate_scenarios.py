@@ -53,11 +53,11 @@ def chartered_snapshot(**request_overrides: object) -> dict:
         "completion": {
             "kind": "software-delivery",
             "criteria": [
-                "pull_request_merged",
-                "main_verified",
-                "acceptance_recorded",
+                "pull_request",
+                "main",
+                "acceptance",
                 "tracker_closed",
-                "workspace_release_safe",
+                "workspace",
             ],
         },
     }
@@ -75,6 +75,9 @@ def chartered_snapshot(**request_overrides: object) -> dict:
                 "state": "ready",
                 "blocked_by": [],
                 "intent": "implementation",
+                "mutating": True,
+                "required_write_claims": ["delivery"],
+                "acceptance_boundary": {"criteria": ["selected-unit"]},
                 "gates": {},
                 "stop_condition": "return reviewed handoff",
             }
@@ -3027,6 +3030,14 @@ class CharteredKernelScenarios(unittest.TestCase):
             "bound_assignment": {"review_passes": 1},
             "work_unit_state": "active",
         }
+        snapshot["chartered"]["active_instances"] = [
+            {
+                "instance": "improve-orchestration+release-next",
+                "mutating": True,
+                "pool": "delivery",
+                "write_claims": ["delivery"],
+            }
+        ]
 
         outcome = run_scenario(snapshot)
 
@@ -3039,16 +3050,35 @@ class CharteredKernelScenarios(unittest.TestCase):
         self.assertEqual(outcome["decision"], "delegate")
         self.assertEqual(outcome["charter"], "ship")
         self.assertEqual(len(outcome["requested_effects"]), 1)
-        self.assertEqual(outcome["requested_effects"][0]["workflow"], "/implement")
+        effect = outcome["requested_effects"][0]
+        self.assertEqual(effect["workflow"], "/implement")
+        self.assertEqual(effect["resource_claims"], ["delivery"])
+        self.assertEqual(effect["acceptance_boundary"], {"criteria": ["selected-unit"]})
+        self.assertEqual(effect["gates"], [])
 
     def test_chartered_delivery_requires_ordinary_closure_evidence(self) -> None:
         complete = chartered_snapshot(
             completion_evidence={
-                "pull_request_merged": True,
-                "main_verified": True,
-                "acceptance_recorded": True,
+                "pull_request": {
+                    "state": "merged",
+                    "reviewed_head": "head123",
+                    "merged_head": "head123",
+                    "merge_commit": "merge123",
+                    "remote_head_proven": True,
+                },
+                "main": {
+                    "verified_commit": "merge123",
+                    "verification_recorded": True,
+                },
+                "acceptance": {
+                    "recorded": True,
+                    "reviewed_head": "head123",
+                },
                 "tracker_closed": True,
-                "workspace_release_safe": True,
+                "workspace": {
+                    "release_safe": True,
+                    "remote_head_proven": True,
+                },
             }
         )
 
@@ -3058,22 +3088,37 @@ class CharteredKernelScenarios(unittest.TestCase):
         self.assertEqual(
             set(outcome["decisive_evidence"]["completion"]),
             {
-                "pull_request_merged",
-                "main_verified",
-                "acceptance_recorded",
+                "pull_request",
+                "main",
+                "acceptance",
                 "tracker_closed",
-                "workspace_release_safe",
+                "workspace",
             },
         )
 
         incomplete = chartered_snapshot(
             work_units=[],
             completion_evidence={
-                "pull_request_merged": True,
-                "main_verified": False,
-                "acceptance_recorded": True,
+                "pull_request": {
+                    "state": "merged",
+                    "reviewed_head": "head123",
+                    "merged_head": "head123",
+                    "merge_commit": "merge123",
+                    "remote_head_proven": True,
+                },
+                "main": {
+                    "verified_commit": "other456",
+                    "verification_recorded": True,
+                },
+                "acceptance": {
+                    "recorded": True,
+                    "reviewed_head": "head123",
+                },
                 "tracker_closed": True,
-                "workspace_release_safe": True,
+                "workspace": {
+                    "release_safe": True,
+                    "remote_head_proven": True,
+                },
             },
         )
         outcome = run_scenario(incomplete)
@@ -3127,6 +3172,36 @@ class CharteredKernelScenarios(unittest.TestCase):
         }
         delegated = run_scenario(snapshot)
         self.assertEqual(delegated["decision"], "delegate")
+
+    def test_persistent_automation_requires_exact_approval(self) -> None:
+        snapshot = chartered_snapshot()
+        snapshot["chartered"]["work_units"][0]["gates"] = {
+            "persistent_automation": {
+                "scope": {"automation": "watch", "resources": ["tracker"]}
+            }
+        }
+
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(
+            stopped["reason"], "persistent-automation-approval-required"
+        )
+
+    def test_delegation_requires_named_authority_and_matching_claim(self) -> None:
+        missing_authority = chartered_snapshot()
+        missing_authority["chartered"]["registry"]["charters"][0][
+            "adoption_authority"
+        ] = ""
+        outcome = run_scenario(missing_authority)
+        self.assertEqual(outcome["reason"], "adoption-authority-required")
+
+        wrong_claim = chartered_snapshot()
+        wrong_claim["chartered"]["work_units"][0]["required_write_claims"] = [
+            "other-resource"
+        ]
+        outcome = run_scenario(wrong_claim)
+        self.assertEqual(outcome["reason"], "write-authority-required")
 
     def test_non_delivery_completion_uses_its_charter_criteria(self) -> None:
         snapshot = chartered_snapshot(

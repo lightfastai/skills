@@ -69,6 +69,10 @@ APPROVAL_GATES = {
         "the requested work materially expands the selected issue",
         "approve the exact expanded scope and update the selected issue",
     ),
+    "persistent_automation": (
+        "persistent automation requires explicit approval",
+        "approve the exact automation, resources, and revocation boundary",
+    ),
 }
 CAPABILITY_CATEGORIES = {
     "ci",
@@ -1530,18 +1534,10 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         for instance in request.get("active_instances", [])
         if instance.get("mutating") is True
     ]
-    if any(
+    same_instance_active = any(
         instance.get("instance") == f"{charter_id}+{programme_id}"
         for instance in active_writers
-    ):
-        return {
-            "decision": "watch",
-            "charter": charter_id,
-            "programme": programme_id,
-            "lifecycle": "active",
-            "root_mutation_permitted": False,
-            "requested_effects": [],
-        }
+    )
     active_writers = [
         instance
         for instance in active_writers
@@ -1608,6 +1604,7 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                     "root_mutation_permitted": False,
                     "requested_effects": [],
                 }
+
             bound = experiment.get("bound_assignment")
             if (
                 experiment.get("work_unit_state") == "active"
@@ -1625,6 +1622,16 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                     "requested_effects": [],
                 }
 
+    if same_instance_active:
+        return {
+            "decision": "watch",
+            "charter": charter_id,
+            "programme": programme_id,
+            "lifecycle": "active",
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
     completion = charter.get("completion")
     if not isinstance(completion, dict):
         raise ValueError("registered charter requires completion criteria")
@@ -1637,20 +1644,48 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         and all(isinstance(name, str) and name.strip() for name in criteria)
         and isinstance(evidence, dict)
         and set(evidence).issubset(criteria)
-        and all(isinstance(value, bool) for value in evidence.values())
     ):
         raise ValueError("invalid charter completion evidence")
     if completion.get("kind") == "software-delivery":
         required_delivery = {
-            "pull_request_merged",
-            "main_verified",
-            "acceptance_recorded",
+            "pull_request",
+            "main",
+            "acceptance",
             "tracker_closed",
-            "workspace_release_safe",
+            "workspace",
         }
         if set(criteria) != required_delivery:
             raise ValueError("invalid software delivery completion")
-    if all(evidence.get(name) is True for name in criteria):
+        pull_request = evidence.get("pull_request", {})
+        main = evidence.get("main", {})
+        acceptance = evidence.get("acceptance", {})
+        workspace = evidence.get("workspace", {})
+        complete = bool(
+            isinstance(pull_request, dict)
+            and pull_request.get("state") == "merged"
+            and is_commit(pull_request.get("reviewed_head"))
+            and pull_request.get("merged_head")
+            == pull_request.get("reviewed_head")
+            and is_commit(pull_request.get("merge_commit"))
+            and pull_request.get("remote_head_proven") is True
+            and isinstance(main, dict)
+            and main.get("verification_recorded") is True
+            and main.get("verified_commit")
+            == pull_request.get("merge_commit")
+            and isinstance(acceptance, dict)
+            and acceptance.get("recorded") is True
+            and acceptance.get("reviewed_head")
+            == pull_request.get("reviewed_head")
+            and evidence.get("tracker_closed") is True
+            and isinstance(workspace, dict)
+            and workspace.get("release_safe") is True
+            and workspace.get("remote_head_proven") is True
+        )
+    else:
+        if not all(isinstance(value, bool) for value in evidence.values()):
+            raise ValueError("invalid non-delivery completion evidence")
+        complete = all(evidence.get(name) is True for name in criteria)
+    if complete:
         return {
             "decision": "done",
             "charter": charter_id,
@@ -1708,7 +1743,27 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "root_mutation_permitted": False,
             "requested_effects": [],
         }
-    if intent in REPOSITORY_MUTATING_INTENTS and not write_claims:
+    authority = charter.get("adoption_authority")
+    required_claims = unit.get("required_write_claims", [])
+    mutating = unit.get("mutating") is True or intent in REPOSITORY_MUTATING_INTENTS
+    if not isinstance(authority, str) or not authority.strip():
+        return {
+            "decision": "stop",
+            "reason": "adoption-authority-required",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    if not (
+        isinstance(required_claims, list)
+        and len(required_claims) == len(set(required_claims))
+        and all(isinstance(claim, str) and claim.strip() for claim in required_claims)
+    ):
+        raise ValueError("invalid work-unit resource claims")
+    if mutating and (
+        not required_claims or not set(required_claims).issubset(write_claims)
+    ):
         return {
             "decision": "stop",
             "reason": "write-authority-required",
@@ -1730,8 +1785,10 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                 "intent": intent,
                 "workflow": ASK_MATT_ROUTES[intent],
                 "work_unit": unit["id"],
-                "authority": charter.get("adoption_authority"),
-                "resource_claims": sorted(write_claims),
+                "authority": authority,
+                "resource_claims": sorted(required_claims),
+                "acceptance_boundary": unit["acceptance_boundary"],
+                "gates": sorted(gates),
                 "stop_condition": unit["stop_condition"],
             }
         ],

@@ -22,7 +22,8 @@
                 "test_registered_delivery_requests_one_bounded_route",
                 "test_chartered_delivery_requires_ordinary_closure_evidence",
                 "test_programme_source_must_match_the_registered_discovery",
-                "test_active_instance_is_watched_before_another_delegation"
+                "test_active_instance_is_watched_before_another_delegation",
+                "test_delegation_requires_named_authority_and_matching_claim"
       ]
     },
     {
@@ -58,7 +59,8 @@
                 "test_meta_assignment_must_fit_the_tuning_envelope",
                 "test_active_work_unit_keeps_its_bound_assignment",
                 "test_non_delivery_completion_uses_its_charter_criteria",
-                "test_chartered_delegation_enforces_exact_approval_gates"
+                "test_chartered_delegation_enforces_exact_approval_gates",
+                "test_persistent_automation_requires_exact_approval"
       ]
     },
     {
