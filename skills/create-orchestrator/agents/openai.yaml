@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Orchestrator"
+  short_description: "Design an unregistered orchestrator charter"
+  default_prompt: "Use $create-orchestrator to interview me one decision at a time, produce an unregistered charter, and test its authority boundaries before proposing registration."

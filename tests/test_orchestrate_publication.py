@@ -156,7 +156,8 @@ class PublicReleaseChecks(unittest.TestCase):
         report = json.loads(completed.stdout)
 
         self.assertEqual(
-            report["skills"], ["manage-public-presence", "orchestrate"]
+            report["skills"],
+            ["create-orchestrator", "manage-public-presence", "orchestrate"],
         )
         self.assertEqual(report["installable_names"], report["skills"])
         self.assertEqual(report["prd_user_stories"], list(range(1, 76)))
@@ -1124,7 +1125,11 @@ class PublicReleaseChecks(unittest.TestCase):
     ) -> None:
         environment = os.environ.copy()
         environment["NO_COLOR"] = "1"
-        for skill_name in ("manage-public-presence", "orchestrate"):
+        for skill_name in (
+            "create-orchestrator",
+            "manage-public-presence",
+            "orchestrate",
+        ):
             with self.subTest(skill=skill_name), tempfile.TemporaryDirectory() as (
                 directory
             ):

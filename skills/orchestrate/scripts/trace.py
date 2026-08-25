@@ -1457,7 +1457,198 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    """Evaluate charter resolution, authority, and one generic transition."""
+    request = snapshot["chartered"]
+    registry = request["registry"]
+    charters = registry["charters"]
+    if not isinstance(charters, list) or not charters:
+        raise ValueError("a charter registry is required")
+
+    requested_id = request.get("charter_id")
+    purpose = request.get("purpose")
+    candidates = [
+        charter
+        for charter in charters
+        if (
+            requested_id is not None
+            and charter.get("id") == requested_id
+        )
+        or (
+            requested_id is None
+            and isinstance(purpose, str)
+            and charter.get("purpose") == purpose
+        )
+    ]
+    if len(candidates) > 1:
+        return {
+            "decision": "stop",
+            "reason": "ambiguous-charter",
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    if len(candidates) != 1:
+        return {
+            "decision": "propose-adoption",
+            "reason": "charter-not-registered",
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    charter = candidates[0]
+    charter_id = charter["id"]
+    if charter.get("state") != "registered":
+        return {
+            "decision": "propose-adoption",
+            "reason": "charter-not-registered",
+            "charter": charter_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    programme_id = request["programme_id"]
+    write_claims = set(charter.get("resource_claims", {}).get("write", []))
+    concurrency = charter.get("concurrency", {})
+    pool = concurrency.get("pool")
+    ceiling = concurrency.get("mutation_ceiling")
+    if not isinstance(ceiling, int) or isinstance(ceiling, bool) or ceiling < 1:
+        raise ValueError("invalid mutation ceiling")
+    active_writers = [
+        instance
+        for instance in request.get("active_instances", [])
+        if instance.get("mutating") is True
+        and instance.get("instance") != f"{charter_id}+{programme_id}"
+    ]
+    overlapping_claim = any(
+        write_claims.intersection(instance.get("write_claims", []))
+        for instance in active_writers
+    )
+    pool_at_capacity = sum(
+        instance.get("pool") == pool for instance in active_writers
+    ) >= ceiling
+    if overlapping_claim or pool_at_capacity:
+        return {
+            "decision": "stop",
+            "reason": "resource-conflict",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    experiment = request.get("experiment")
+    if charter.get("level") == "meta":
+        target = request.get("target")
+        if not isinstance(target, dict):
+            raise ValueError("meta charter requires a target")
+        bilateral = target.get("target_opt_in") is True and target.get(
+            "control_plane_registration"
+        ) is True
+        if not bilateral:
+            return {
+                "decision": "stop",
+                "reason": "bilateral-meta-opt-in-required",
+                "charter": charter_id,
+                "programme": programme_id,
+                "root_mutation_permitted": False,
+                "requested_effects": [],
+            }
+        if experiment is not None:
+            assignment = experiment.get("assignment", {})
+            envelope = target.get("tuning_envelope", {})
+            if not assignment or any(
+                control not in envelope or value not in envelope[control]
+                for control, value in assignment.items()
+            ):
+                return {
+                    "decision": "stop",
+                    "reason": "tuning-envelope-violation",
+                    "charter": charter_id,
+                    "programme": programme_id,
+                    "root_mutation_permitted": False,
+                    "requested_effects": [],
+                }
+            bound = experiment.get("bound_assignment")
+            if (
+                experiment.get("work_unit_state") == "active"
+                and bound is not None
+                and not json_equal_strict(bound, assignment)
+            ):
+                return {
+                    "decision": "stop",
+                    "reason": "assignment-stability-violation",
+                    "charter": charter_id,
+                    "programme": programme_id,
+                    "root_mutation_permitted": False,
+                    "requested_effects": [],
+                }
+
+    completion = request.get("completion", {})
+    criteria = completion.get("criteria", {})
+    if criteria:
+        if not all(isinstance(value, bool) for value in criteria.values()):
+            raise ValueError("completion criteria must be boolean")
+        if all(criteria.values()):
+            return {
+                "decision": "done",
+                "charter": charter_id,
+                "programme": programme_id,
+                "lifecycle": "done",
+                "decisive_evidence": {"completion": sorted(criteria)},
+                "root_mutation_permitted": False,
+                "requested_effects": [],
+            }
+
+    frontier = [
+        unit
+        for unit in request.get("work_units", [])
+        if unit.get("state") == "ready" and not unit.get("blocked_by", [])
+    ]
+    if not frontier:
+        return {
+            "decision": "waiting",
+            "reason": "no-ready-work-unit",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    unit = frontier[0]
+    intent = unit["intent"]
+    permitted_routes = charter.get("routes", [])
+    if intent not in permitted_routes or intent not in ASK_MATT_ROUTES:
+        return {
+            "decision": "stop",
+            "reason": "route-not-authorized",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    return {
+        "decision": "delegate",
+        "charter": charter_id,
+        "programme": programme_id,
+        "lifecycle": "ready",
+        "root_mutation_permitted": False,
+        "requested_effects": [
+            {
+                "effect": "delegate",
+                "router": "ask-matt",
+                "intent": intent,
+                "workflow": ASK_MATT_ROUTES[intent],
+                "work_unit": unit["id"],
+                "authority": charter.get("adoption_authority"),
+                "resource_claims": sorted(write_claims),
+                "stop_condition": unit["stop_condition"],
+            }
+        ],
+    }
+
+
 def _trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    if "chartered" in snapshot:
+        return chartered(snapshot)
     if "bootstrap" in snapshot:
         return bootstrap(snapshot)
     if "tracker" in snapshot:
