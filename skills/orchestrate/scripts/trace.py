@@ -69,6 +69,10 @@ APPROVAL_GATES = {
         "the requested work materially expands the selected issue",
         "approve the exact expanded scope and update the selected issue",
     ),
+    "persistent_automation": (
+        "persistent automation requires explicit approval",
+        "approve the exact automation, resources, and revocation boundary",
+    ),
 }
 CAPABILITY_CATEGORIES = {
     "ci",
@@ -1457,7 +1461,356 @@ def recover(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    """Evaluate charter resolution, authority, and one generic transition."""
+    request = snapshot["chartered"]
+    registry = request["registry"]
+    charters = registry["charters"]
+    if not isinstance(charters, list) or not charters:
+        raise ValueError("a charter registry is required")
+
+    requested_id = request.get("charter_id")
+    purpose = request.get("purpose")
+    candidates = [
+        charter
+        for charter in charters
+        if (
+            requested_id is not None
+            and charter.get("id") == requested_id
+        )
+        or (
+            requested_id is None
+            and isinstance(purpose, str)
+            and charter.get("purpose") == purpose
+        )
+    ]
+    if len(candidates) > 1:
+        return {
+            "decision": "stop",
+            "reason": "ambiguous-charter",
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    if len(candidates) != 1:
+        return {
+            "decision": "propose-adoption",
+            "reason": "charter-not-registered",
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    charter = candidates[0]
+    charter_id = charter["id"]
+    if charter.get("state") != "registered":
+        return {
+            "decision": "propose-adoption",
+            "reason": "charter-not-registered",
+            "charter": charter_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    programme = request["programme"]
+    programme_id = programme["id"]
+    if not json_equal_strict(
+        programme.get("source"), charter.get("programme_source")
+    ):
+        return {
+            "decision": "stop",
+            "reason": "programme-source-mismatch",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    write_claims = set(charter.get("resource_claims", {}).get("write", []))
+    concurrency = charter.get("concurrency", {})
+    pool = concurrency.get("pool")
+    ceiling = concurrency.get("mutation_ceiling")
+    if not isinstance(ceiling, int) or isinstance(ceiling, bool) or ceiling < 1:
+        raise ValueError("invalid mutation ceiling")
+    active_writers = [
+        instance
+        for instance in request.get("active_instances", [])
+        if instance.get("mutating") is True
+    ]
+    same_instance_active = any(
+        instance.get("instance") == f"{charter_id}+{programme_id}"
+        for instance in active_writers
+    )
+    active_writers = [
+        instance
+        for instance in active_writers
+        if instance.get("instance") != f"{charter_id}+{programme_id}"
+    ]
+    overlapping_claim = any(
+        write_claims.intersection(instance.get("write_claims", []))
+        for instance in active_writers
+    )
+    pool_at_capacity = sum(
+        instance.get("pool") == pool for instance in active_writers
+    ) >= ceiling
+    if overlapping_claim or pool_at_capacity:
+        return {
+            "decision": "stop",
+            "reason": "resource-conflict",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    experiment = request.get("experiment")
+    if charter.get("level") == "meta":
+        target = request.get("target")
+        if not isinstance(target, dict):
+            raise ValueError("meta charter requires a target")
+        target_opt_in = target.get("target_opt_in")
+        control_plane_registration = target.get("control_plane_registration")
+        bilateral = (
+            isinstance(target_opt_in, dict)
+            and isinstance(control_plane_registration, dict)
+            and target_opt_in.get("meta_charter") == charter_id
+            and control_plane_registration.get("meta_charter") == charter_id
+            and target_opt_in.get("target_instance")
+            == control_plane_registration.get("target_instance")
+            and json_equal_strict(
+                target_opt_in.get("evidence_scope"),
+                control_plane_registration.get("evidence_scope"),
+            )
+            and is_bounded_scope(target_opt_in.get("evidence_scope"))
+        )
+        if not bilateral:
+            return {
+                "decision": "stop",
+                "reason": "bilateral-meta-opt-in-required",
+                "charter": charter_id,
+                "programme": programme_id,
+                "root_mutation_permitted": False,
+                "requested_effects": [],
+            }
+        if experiment is not None:
+            assignment = experiment.get("assignment", {})
+            envelope = target.get("tuning_envelope", {})
+            if not assignment or any(
+                control not in envelope or value not in envelope[control]
+                for control, value in assignment.items()
+            ):
+                return {
+                    "decision": "stop",
+                    "reason": "tuning-envelope-violation",
+                    "charter": charter_id,
+                    "programme": programme_id,
+                    "root_mutation_permitted": False,
+                    "requested_effects": [],
+                }
+
+            bound = experiment.get("bound_assignment")
+            if (
+                experiment.get("work_unit_state") == "active"
+                and (
+                    bound is None
+                    or not json_equal_strict(bound, assignment)
+                )
+            ):
+                return {
+                    "decision": "stop",
+                    "reason": "assignment-stability-violation",
+                    "charter": charter_id,
+                    "programme": programme_id,
+                    "root_mutation_permitted": False,
+                    "requested_effects": [],
+                }
+
+    if same_instance_active:
+        return {
+            "decision": "watch",
+            "charter": charter_id,
+            "programme": programme_id,
+            "lifecycle": "active",
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    completion = charter.get("completion")
+    if not isinstance(completion, dict):
+        raise ValueError("registered charter requires completion criteria")
+    criteria = completion.get("criteria")
+    evidence = request.get("completion_evidence", {})
+    if not (
+        isinstance(criteria, list)
+        and criteria
+        and len(criteria) == len(set(criteria))
+        and all(isinstance(name, str) and name.strip() for name in criteria)
+        and isinstance(evidence, dict)
+        and set(evidence).issubset(criteria)
+    ):
+        raise ValueError("invalid charter completion evidence")
+    if completion.get("kind") == "software-delivery":
+        required_delivery = {
+            "pull_request",
+            "main",
+            "acceptance",
+            "tracker_closed",
+            "workspace",
+        }
+        if set(criteria) != required_delivery:
+            raise ValueError("invalid software delivery completion")
+        pull_request = evidence.get("pull_request", {})
+        main = evidence.get("main", {})
+        acceptance = evidence.get("acceptance", {})
+        workspace = evidence.get("workspace", {})
+        complete = bool(
+            isinstance(pull_request, dict)
+            and pull_request.get("state") == "merged"
+            and is_commit(pull_request.get("reviewed_head"))
+            and pull_request.get("merged_head")
+            == pull_request.get("reviewed_head")
+            and is_commit(pull_request.get("merge_commit"))
+            and pull_request.get("remote_head_proven") is True
+            and isinstance(main, dict)
+            and main.get("verification_recorded") is True
+            and main.get("verified_commit")
+            == pull_request.get("merge_commit")
+            and isinstance(acceptance, dict)
+            and acceptance.get("recorded") is True
+            and acceptance.get("reviewed_head")
+            == pull_request.get("reviewed_head")
+            and evidence.get("tracker_closed") is True
+            and isinstance(workspace, dict)
+            and workspace.get("release_safe") is True
+            and workspace.get("remote_head_proven") is True
+        )
+    else:
+        if not all(isinstance(value, bool) for value in evidence.values()):
+            raise ValueError("invalid non-delivery completion evidence")
+        complete = all(evidence.get(name) is True for name in criteria)
+    if complete:
+        return {
+            "decision": "done",
+            "charter": charter_id,
+            "programme": programme_id,
+            "lifecycle": "done",
+            "decisive_evidence": {"completion": sorted(criteria)},
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+
+    frontier = [
+        unit
+        for unit in request.get("work_units", [])
+        if unit.get("state") == "ready" and not unit.get("blocked_by", [])
+    ]
+    if not frontier:
+        return {
+            "decision": "waiting",
+            "reason": "no-ready-work-unit",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    unit = frontier[0]
+    intent = unit["intent"]
+    permitted_routes = charter.get("routes", [])
+    if intent not in permitted_routes or intent not in ASK_MATT_ROUTES:
+        return {
+            "decision": "stop",
+            "reason": "route-not-authorized",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    gates = unit.get("gates", {})
+    if gates.get("decision_conflict") is True:
+        return {
+            "decision": "stop",
+            "reason": "decision-conflict",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    approvals = request.get("approvals", {})
+    pause = delegation_pause({"issue": 0, "gates": gates}, approvals)
+    if pause is not None:
+        return {
+            "decision": "stop",
+            "reason": pause["reason"],
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    authority = charter.get("adoption_authority")
+    required_claims = unit.get("required_write_claims", [])
+    mutating = unit.get("mutating") is True or intent in REPOSITORY_MUTATING_INTENTS
+    if not isinstance(authority, str) or not authority.strip():
+        return {
+            "decision": "stop",
+            "reason": "adoption-authority-required",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    if not (
+        isinstance(required_claims, list)
+        and len(required_claims) == len(set(required_claims))
+        and all(isinstance(claim, str) and claim.strip() for claim in required_claims)
+    ):
+        raise ValueError("invalid work-unit resource claims")
+    acceptance_boundary = unit.get("acceptance_boundary")
+    stop_condition = unit.get("stop_condition")
+    if not set(required_claims).issubset(write_claims) or (
+        mutating and not required_claims
+    ):
+        return {
+            "decision": "stop",
+            "reason": "write-authority-required",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    if not is_bounded_scope(acceptance_boundary) or not (
+        isinstance(stop_condition, str) and stop_condition.strip()
+    ):
+        return {
+            "decision": "stop",
+            "reason": "bounded-delegation-contract-required",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    return {
+        "decision": "delegate",
+        "charter": charter_id,
+        "programme": programme_id,
+        "lifecycle": "ready",
+        "root_mutation_permitted": False,
+        "requested_effects": [
+            {
+                "effect": "delegate",
+                "router": "ask-matt",
+                "intent": intent,
+                "workflow": ASK_MATT_ROUTES[intent],
+                "work_unit": unit["id"],
+                "authority": authority,
+                "resource_claims": sorted(required_claims),
+                "acceptance_boundary": acceptance_boundary,
+                "gates": sorted(gates),
+                "stop_condition": stop_condition,
+            }
+        ],
+    }
+
+
 def _trace(snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    if "chartered" in snapshot:
+        return chartered(snapshot)
     if "bootstrap" in snapshot:
         return bootstrap(snapshot)
     if "tracker" in snapshot:

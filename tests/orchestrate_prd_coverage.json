@@ -5,17 +5,26 @@
       "name": "durable coordination and recovery",
       "user_stories": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
       "scenario_tests": [
-        "test_fresh_task_recovers_ready_programme_from_tracker_without_chat",
-        "test_merged_closed_and_verified_evidence_recovers_done"
+                "test_fresh_task_recovers_ready_programme_from_tracker_without_chat",
+                "test_merged_closed_and_verified_evidence_recovers_done",
+                "test_ambiguous_charter_selection_stops_without_guessing",
+                "test_draft_charter_remains_proposal_only"
       ]
     },
     {
       "name": "scheduling and delegation",
       "user_stories": [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33],
       "scenario_tests": [
-        "test_native_dependency_frontier_uses_approved_order",
-        "test_ready_ticket_produces_one_bounded_ask_matt_delegation",
-        "test_ask_matt_routes_every_approved_intent"
+                "test_native_dependency_frontier_uses_approved_order",
+                "test_ready_ticket_produces_one_bounded_ask_matt_delegation",
+                "test_ask_matt_routes_every_approved_intent",
+                "test_overlapping_writer_claim_stops_even_with_capacity",
+                "test_registered_delivery_requests_one_bounded_route",
+                "test_chartered_delivery_requires_ordinary_closure_evidence",
+                "test_programme_source_must_match_the_registered_discovery",
+                "test_active_instance_is_watched_before_another_delegation",
+                "test_delegation_requires_named_authority_and_matching_claim",
+                "test_delegation_requires_bounded_acceptance_and_stop"
       ]
     },
     {
@@ -43,10 +52,16 @@
       "name": "capabilities, bootstrap, and migrations",
       "user_stories": [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63],
       "scenario_tests": [
-        "test_capability_gaps_become_bounded_proposals_without_root_implementation",
-        "test_skill_capability_records_provenance_and_gates_untrusted_publishers",
-        "test_bootstrap_audits_evidence_and_reuses_only_satisfying_conventions",
-        "test_policy_changes_produce_reviewable_migrations_without_rewrites"
+                "test_capability_gaps_become_bounded_proposals_without_root_implementation",
+                "test_skill_capability_records_provenance_and_gates_untrusted_publishers",
+                "test_bootstrap_audits_evidence_and_reuses_only_satisfying_conventions",
+                "test_policy_changes_produce_reviewable_migrations_without_rewrites",
+                "test_meta_observation_requires_bilateral_opt_in",
+                "test_meta_assignment_must_fit_the_tuning_envelope",
+                "test_active_work_unit_keeps_its_bound_assignment",
+                "test_non_delivery_completion_uses_its_charter_criteria",
+                "test_chartered_delegation_enforces_exact_approval_gates",
+                "test_persistent_automation_requires_exact_approval"
       ]
     },
     {

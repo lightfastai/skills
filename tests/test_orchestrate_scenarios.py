@@ -39,6 +39,54 @@ def run_invalid_scenario(snapshot: dict) -> subprocess.CompletedProcess:
     )
 
 
+def chartered_snapshot(**request_overrides: object) -> dict:
+    charter = {
+        "id": "ship",
+        "state": "registered",
+        "purpose": "delivery",
+        "level": "object",
+        "programme_source": {"tracker": "configured", "selector": "active"},
+        "resource_claims": {"read": ["repository"], "write": ["delivery"]},
+        "concurrency": {"pool": "delivery", "mutation_ceiling": 1},
+        "routes": ["implementation", "diagnosis", "research"],
+        "adoption_authority": "repository maintainers",
+        "completion": {
+            "kind": "software-delivery",
+            "criteria": [
+                "pull_request",
+                "main",
+                "acceptance",
+                "tracker_closed",
+                "workspace",
+            ],
+        },
+    }
+    request = {
+        "registry": {"charters": [charter]},
+        "purpose": "delivery",
+        "programme": {
+            "id": "release-next",
+            "source": {"tracker": "configured", "selector": "active"},
+        },
+        "active_instances": [],
+        "work_units": [
+            {
+                "id": "unit-next",
+                "state": "ready",
+                "blocked_by": [],
+                "intent": "implementation",
+                "mutating": True,
+                "required_write_claims": ["delivery"],
+                "acceptance_boundary": {"criteria": ["selected-unit"]},
+                "gates": {},
+                "stop_condition": "return reviewed handoff",
+            }
+        ],
+    }
+    request.update(request_overrides)
+    return {"chartered": request}
+
+
 def prepared_snapshot(intent: str = "implementation", programme_state: str = "active") -> dict:
     return {
         "repository": {
@@ -2849,6 +2897,367 @@ class OrchestrateScenarios(unittest.TestCase):
 
         self.assertEqual(outcome["decision"], "stop")
         self.assertEqual(outcome["reason"], "multiple-mutating-tasks")
+
+
+class CharteredKernelScenarios(unittest.TestCase):
+    def test_ambiguous_charter_selection_stops_without_guessing(self) -> None:
+        snapshot = chartered_snapshot()
+        duplicate = dict(snapshot["chartered"]["registry"]["charters"][0])
+        duplicate["id"] = "release"
+        snapshot["chartered"]["registry"]["charters"].append(duplicate)
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "ambiguous-charter")
+        self.assertEqual(outcome["requested_effects"], [])
+
+    def test_draft_charter_remains_proposal_only(self) -> None:
+        snapshot = chartered_snapshot()
+        snapshot["chartered"]["registry"]["charters"][0]["state"] = "draft"
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "propose-adoption")
+        self.assertFalse(outcome["root_mutation_permitted"])
+
+    def test_overlapping_writer_claim_stops_even_with_capacity(self) -> None:
+        snapshot = chartered_snapshot(
+            active_instances=[
+                {
+                    "instance": "repair+maintenance",
+                    "mutating": True,
+                    "pool": "maintenance",
+                    "write_claims": ["delivery"],
+                }
+            ]
+        )
+        snapshot["chartered"]["registry"]["charters"][0]["concurrency"][
+            "mutation_ceiling"
+        ] = 2
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "resource-conflict")
+
+    def test_meta_observation_requires_bilateral_opt_in(self) -> None:
+        snapshot = chartered_snapshot(purpose="meta")
+        charter = snapshot["chartered"]["registry"]["charters"][0]
+        charter.update(
+            {
+                "id": "improve-orchestration",
+                "purpose": "meta",
+                "level": "meta",
+            }
+        )
+        snapshot["chartered"]["target"] = {
+            "target_opt_in": {
+                "meta_charter": "improve-orchestration",
+                "target_instance": "ship+release-next",
+                "evidence_scope": {"events": ["handoff"]},
+            },
+            "control_plane_registration": {
+                "meta_charter": "improve-orchestration",
+                "target_instance": "ship+release-next",
+                "evidence_scope": {"events": ["merge"]},
+            },
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "bilateral-meta-opt-in-required")
+
+    def test_meta_assignment_must_fit_the_tuning_envelope(self) -> None:
+        snapshot = chartered_snapshot(purpose="meta")
+        charter = snapshot["chartered"]["registry"]["charters"][0]
+        charter.update(
+            {
+                "id": "improve-orchestration",
+                "purpose": "meta",
+                "level": "meta",
+            }
+        )
+        snapshot["chartered"]["target"] = {
+            "target_opt_in": {
+                "meta_charter": "improve-orchestration",
+                "target_instance": "ship+release-next",
+                "evidence_scope": {"events": ["handoff"]},
+            },
+            "control_plane_registration": {
+                "meta_charter": "improve-orchestration",
+                "target_instance": "ship+release-next",
+                "evidence_scope": {"events": ["handoff"]},
+            },
+            "tuning_envelope": {"review_passes": [1, 2]},
+        }
+        snapshot["chartered"]["experiment"] = {
+            "assignment": {"review_passes": 3},
+            "work_unit_state": "ready",
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "tuning-envelope-violation")
+
+    def test_active_work_unit_keeps_its_bound_assignment(self) -> None:
+        snapshot = chartered_snapshot(purpose="meta")
+        charter = snapshot["chartered"]["registry"]["charters"][0]
+        charter.update(
+            {
+                "id": "improve-orchestration",
+                "purpose": "meta",
+                "level": "meta",
+            }
+        )
+        snapshot["chartered"]["target"] = {
+            "target_opt_in": {
+                "meta_charter": "improve-orchestration",
+                "target_instance": "ship+release-next",
+                "evidence_scope": {"events": ["handoff"]},
+            },
+            "control_plane_registration": {
+                "meta_charter": "improve-orchestration",
+                "target_instance": "ship+release-next",
+                "evidence_scope": {"events": ["handoff"]},
+            },
+            "tuning_envelope": {"review_passes": [1, 2]},
+        }
+        snapshot["chartered"]["experiment"] = {
+            "assignment": {"review_passes": 2},
+            "bound_assignment": {"review_passes": 1},
+            "work_unit_state": "active",
+        }
+        snapshot["chartered"]["active_instances"] = [
+            {
+                "instance": "improve-orchestration+release-next",
+                "mutating": True,
+                "pool": "delivery",
+                "write_claims": ["delivery"],
+            }
+        ]
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "assignment-stability-violation")
+
+    def test_registered_delivery_requests_one_bounded_route(self) -> None:
+        outcome = run_scenario(chartered_snapshot())
+
+        self.assertEqual(outcome["decision"], "delegate")
+        self.assertEqual(outcome["charter"], "ship")
+        self.assertEqual(len(outcome["requested_effects"]), 1)
+        effect = outcome["requested_effects"][0]
+        self.assertEqual(effect["workflow"], "/implement")
+        self.assertEqual(effect["resource_claims"], ["delivery"])
+        self.assertEqual(effect["acceptance_boundary"], {"criteria": ["selected-unit"]})
+        self.assertEqual(effect["gates"], [])
+
+    def test_chartered_delivery_requires_ordinary_closure_evidence(self) -> None:
+        complete = chartered_snapshot(
+            completion_evidence={
+                "pull_request": {
+                    "state": "merged",
+                    "reviewed_head": "head123",
+                    "merged_head": "head123",
+                    "merge_commit": "merge123",
+                    "remote_head_proven": True,
+                },
+                "main": {
+                    "verified_commit": "merge123",
+                    "verification_recorded": True,
+                },
+                "acceptance": {
+                    "recorded": True,
+                    "reviewed_head": "head123",
+                },
+                "tracker_closed": True,
+                "workspace": {
+                    "release_safe": True,
+                    "remote_head_proven": True,
+                },
+            }
+        )
+
+        outcome = run_scenario(complete)
+
+        self.assertEqual(outcome["decision"], "done")
+        self.assertEqual(
+            set(outcome["decisive_evidence"]["completion"]),
+            {
+                "pull_request",
+                "main",
+                "acceptance",
+                "tracker_closed",
+                "workspace",
+            },
+        )
+
+        incomplete = chartered_snapshot(
+            work_units=[],
+            completion_evidence={
+                "pull_request": {
+                    "state": "merged",
+                    "reviewed_head": "head123",
+                    "merged_head": "head123",
+                    "merge_commit": "merge123",
+                    "remote_head_proven": True,
+                },
+                "main": {
+                    "verified_commit": "other456",
+                    "verification_recorded": True,
+                },
+                "acceptance": {
+                    "recorded": True,
+                    "reviewed_head": "head123",
+                },
+                "tracker_closed": True,
+                "workspace": {
+                    "release_safe": True,
+                    "remote_head_proven": True,
+                },
+            },
+        )
+        outcome = run_scenario(incomplete)
+        self.assertEqual(outcome["decision"], "waiting")
+
+    def test_programme_source_must_match_the_registered_discovery(self) -> None:
+        snapshot = chartered_snapshot()
+        snapshot["chartered"]["programme"]["source"] = {
+            "tracker": "other",
+            "selector": "active",
+        }
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "stop")
+        self.assertEqual(outcome["reason"], "programme-source-mismatch")
+
+    def test_active_instance_is_watched_before_another_delegation(self) -> None:
+        snapshot = chartered_snapshot(
+            active_instances=[
+                {
+                    "instance": "ship+release-next",
+                    "mutating": True,
+                    "pool": "delivery",
+                    "write_claims": ["delivery"],
+                }
+            ]
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "watch")
+        self.assertEqual(outcome["requested_effects"], [])
+
+    def test_chartered_delegation_enforces_exact_approval_gates(self) -> None:
+        snapshot = chartered_snapshot()
+        snapshot["chartered"]["work_units"][0]["gates"] = {
+            "broad_permissions": {"scope": {"resources": ["repository"]}}
+        }
+
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(stopped["reason"], "broad-permissions-approval-required")
+
+        snapshot["chartered"]["approvals"] = {
+            "broad_permissions": {
+                "approved": True,
+                "scope": {"resources": ["repository"]},
+            }
+        }
+        delegated = run_scenario(snapshot)
+        self.assertEqual(delegated["decision"], "delegate")
+
+    def test_persistent_automation_requires_exact_approval(self) -> None:
+        snapshot = chartered_snapshot()
+        snapshot["chartered"]["work_units"][0]["gates"] = {
+            "persistent_automation": {
+                "scope": {"automation": "watch", "resources": ["tracker"]}
+            }
+        }
+
+        stopped = run_scenario(snapshot)
+
+        self.assertEqual(stopped["decision"], "stop")
+        self.assertEqual(
+            stopped["reason"], "persistent-automation-approval-required"
+        )
+
+    def test_delegation_requires_named_authority_and_matching_claim(self) -> None:
+        missing_authority = chartered_snapshot()
+        missing_authority["chartered"]["registry"]["charters"][0][
+            "adoption_authority"
+        ] = ""
+        outcome = run_scenario(missing_authority)
+        self.assertEqual(outcome["reason"], "adoption-authority-required")
+
+        wrong_claim = chartered_snapshot()
+        wrong_claim["chartered"]["work_units"][0]["required_write_claims"] = [
+            "other-resource"
+        ]
+        outcome = run_scenario(wrong_claim)
+        self.assertEqual(outcome["reason"], "write-authority-required")
+
+        read_only_wrong_claim = chartered_snapshot()
+        unit = read_only_wrong_claim["chartered"]["work_units"][0]
+        unit.update(
+            {
+                "intent": "research",
+                "mutating": False,
+                "required_write_claims": ["other-resource"],
+            }
+        )
+        outcome = run_scenario(read_only_wrong_claim)
+        self.assertEqual(outcome["reason"], "write-authority-required")
+
+    def test_delegation_requires_bounded_acceptance_and_stop(self) -> None:
+        missing_acceptance = chartered_snapshot()
+        missing_acceptance["chartered"]["work_units"][0][
+            "acceptance_boundary"
+        ] = None
+        outcome = run_scenario(missing_acceptance)
+        self.assertEqual(
+            outcome["reason"], "bounded-delegation-contract-required"
+        )
+
+        missing_stop = chartered_snapshot()
+        missing_stop["chartered"]["work_units"][0]["stop_condition"] = ""
+        outcome = run_scenario(missing_stop)
+        self.assertEqual(
+            outcome["reason"], "bounded-delegation-contract-required"
+        )
+
+    def test_non_delivery_completion_uses_its_charter_criteria(self) -> None:
+        snapshot = chartered_snapshot(
+            purpose="research",
+            completion_evidence={
+                "evaluation_recorded": True,
+                "decision_recorded": True,
+            }
+        )
+        charter = snapshot["chartered"]["registry"]["charters"][0]
+        charter.update(
+            {
+                "id": "study",
+                "purpose": "research",
+                "level": "object",
+                "completion": {
+                    "kind": "evaluation",
+                    "criteria": ["evaluation_recorded", "decision_recorded"],
+                },
+            }
+        )
+
+        outcome = run_scenario(snapshot)
+
+        self.assertEqual(outcome["decision"], "done")
+        self.assertEqual(outcome["lifecycle"], "done")
+        self.assertNotIn("pull_request", outcome["decisive_evidence"])
 
 
 if __name__ == "__main__":

@@ -1280,7 +1280,7 @@ def validate_documentation(root: Path) -> List[Dict[str, str]]:
         "first run",
         "coordination boundary",
         "durable",
-        "repository contract",
+        "registry",
         "approval",
     )
     violations = [
@@ -1290,8 +1290,8 @@ def validate_documentation(root: Path) -> List[Dict[str, str]]:
     ]
     normalized_skill_docs = " ".join(skill_docs.split())
     if not (
-        "installed skills or declared capabilities" in normalized_skill_docs
-        and "configured tracker" in skill_docs
+        "authority home's instructions" in normalized_skill_docs
+        and "orchestration registry" in skill_docs
     ):
         violations.append(
             violation(
