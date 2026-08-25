@@ -3203,6 +3203,35 @@ class CharteredKernelScenarios(unittest.TestCase):
         outcome = run_scenario(wrong_claim)
         self.assertEqual(outcome["reason"], "write-authority-required")
 
+        read_only_wrong_claim = chartered_snapshot()
+        unit = read_only_wrong_claim["chartered"]["work_units"][0]
+        unit.update(
+            {
+                "intent": "research",
+                "mutating": False,
+                "required_write_claims": ["other-resource"],
+            }
+        )
+        outcome = run_scenario(read_only_wrong_claim)
+        self.assertEqual(outcome["reason"], "write-authority-required")
+
+    def test_delegation_requires_bounded_acceptance_and_stop(self) -> None:
+        missing_acceptance = chartered_snapshot()
+        missing_acceptance["chartered"]["work_units"][0][
+            "acceptance_boundary"
+        ] = None
+        outcome = run_scenario(missing_acceptance)
+        self.assertEqual(
+            outcome["reason"], "bounded-delegation-contract-required"
+        )
+
+        missing_stop = chartered_snapshot()
+        missing_stop["chartered"]["work_units"][0]["stop_condition"] = ""
+        outcome = run_scenario(missing_stop)
+        self.assertEqual(
+            outcome["reason"], "bounded-delegation-contract-required"
+        )
+
     def test_non_delivery_completion_uses_its_charter_criteria(self) -> None:
         snapshot = chartered_snapshot(
             purpose="research",

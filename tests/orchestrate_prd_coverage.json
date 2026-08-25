@@ -23,7 +23,8 @@
                 "test_chartered_delivery_requires_ordinary_closure_evidence",
                 "test_programme_source_must_match_the_registered_discovery",
                 "test_active_instance_is_watched_before_another_delegation",
-                "test_delegation_requires_named_authority_and_matching_claim"
+                "test_delegation_requires_named_authority_and_matching_claim",
+                "test_delegation_requires_bounded_acceptance_and_stop"
       ]
     },
     {

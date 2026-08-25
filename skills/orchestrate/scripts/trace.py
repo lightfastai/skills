@@ -1761,12 +1761,25 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         and all(isinstance(claim, str) and claim.strip() for claim in required_claims)
     ):
         raise ValueError("invalid work-unit resource claims")
-    if mutating and (
-        not required_claims or not set(required_claims).issubset(write_claims)
+    acceptance_boundary = unit.get("acceptance_boundary")
+    stop_condition = unit.get("stop_condition")
+    if not set(required_claims).issubset(write_claims) or (
+        mutating and not required_claims
     ):
         return {
             "decision": "stop",
             "reason": "write-authority-required",
+            "charter": charter_id,
+            "programme": programme_id,
+            "root_mutation_permitted": False,
+            "requested_effects": [],
+        }
+    if not is_bounded_scope(acceptance_boundary) or not (
+        isinstance(stop_condition, str) and stop_condition.strip()
+    ):
+        return {
+            "decision": "stop",
+            "reason": "bounded-delegation-contract-required",
             "charter": charter_id,
             "programme": programme_id,
             "root_mutation_permitted": False,
@@ -1787,9 +1800,9 @@ def chartered(snapshot: Dict[str, Any]) -> Dict[str, Any]:
                 "work_unit": unit["id"],
                 "authority": authority,
                 "resource_claims": sorted(required_claims),
-                "acceptance_boundary": unit["acceptance_boundary"],
+                "acceptance_boundary": acceptance_boundary,
                 "gates": sorted(gates),
-                "stop_condition": unit["stop_condition"],
+                "stop_condition": stop_condition,
             }
         ],
     }
