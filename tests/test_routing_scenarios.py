@@ -69,6 +69,8 @@ class RoutingScenarioTests(unittest.TestCase):
 
                 if facts.get("greeting") or facts.get("ordinary_question"):
                     self.assertEqual(expected["action"], "conversation")
+                if facts.get("materially_ambiguous"):
+                    self.assertEqual(expected["action"], "question")
                 if facts.get("controlled_public_identity") and not facts.get("operational_wayfinding"):
                     self.assertEqual(recommendations, ["$manage-public-presence"])
                 if facts.get("exact_revision_campaign") and not facts.get("lifecycle_rule_change"):
