@@ -209,6 +209,11 @@ class RoutingScenarioTests(unittest.TestCase):
                         self.assertLessEqual(call["limit"], tool_schema["max_results"])
 
                 successful_calls = [call for call in calls if "error" not in call["response"]]
+                queried_partitions = {call["partition"] for call in successful_calls}
+                self.assertTrue(
+                    set(accessible_partitions).issubset(queried_partitions),
+                    "every accessible requested partition must return at least one search result",
+                )
                 exhaustive_traversal_established = not request["all"]
                 if (
                     request["all"]
