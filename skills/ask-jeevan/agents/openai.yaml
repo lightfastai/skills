@@ -1,6 +1,6 @@
 interface:
   display_name: "Ask Jeevan"
-  short_description: "Choose one Lightfast route and stop"
-  default_prompt: "Use $ask-jeevan to recommend the single best Lightfast route for this request."
+  short_description: "Recommend one available capability and stop"
+  default_prompt: "Use $ask-jeevan to advise whether this request needs one available project capability or Lightfast route."
 policy:
   allow_implicit_invocation: false
