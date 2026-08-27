@@ -1,26 +1,168 @@
 {
   "ask_jeevan": [
     {
+      "name": "Greeting stays conversational",
+      "message": "Hello!",
+      "facts": {
+        "greeting": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "conversation",
+        "recommendations": []
+      }
+    },
+    {
+      "name": "Ordinary question stays conversational",
+      "message": "What does Lightfast mean by a Route Index?",
+      "facts": {
+        "ordinary_question": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "conversation",
+        "recommendations": []
+      }
+    },
+    {
+      "name": "Materially ambiguous intent asks one question",
+      "message": "Should I improve the continuity idea, research it, or start building it?",
+      "facts": {
+        "materially_ambiguous": true
+      },
+      "available_capabilities": [
+        "grill-me",
+        "research"
+      ],
+      "expected": {
+        "action": "question",
+        "recommendations": []
+      }
+    },
+    {
+      "name": "Exploratory idea uses an installed grilling specialist",
+      "message": "I have an idea for improving continuity. Help me pressure-test it before we choose what to do.",
+      "facts": {
+        "exploratory_idea": true
+      },
+      "available_capabilities": [
+        "grill-me",
+        "research"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$grill-me"
+        ]
+      }
+    },
+    {
+      "name": "Research request uses an installed research specialist",
+      "message": "Research how recent agent systems preserve continuity across conversations.",
+      "facts": {
+        "research_request": true
+      },
+      "available_capabilities": [
+        "research"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$research"
+        ]
+      }
+    },
+    {
+      "name": "Question-shaped actionable request still uses a specialist",
+      "message": "Which skill should I use to research continuity across conversations?",
+      "facts": {
+        "research_request": true,
+        "question_shaped": true
+      },
+      "available_capabilities": [
+        "research"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$research"
+        ]
+      }
+    },
+    {
+      "name": "Missing optional specialist is not assumed or substituted",
+      "message": "Research how recent agent systems preserve continuity across conversations.",
+      "facts": {
+        "research_request": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "availability-gap",
+        "recommendations": []
+      }
+    },
+    {
       "name": "Accepted code outcome enters Ship",
+      "message": "Ship the accepted parser fix through the repository's completion boundary.",
       "facts": {
         "bounded_code_outcome": true
       },
-      "expected_route": "/ship"
+      "available_capabilities": [
+        "ship"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$ship"
+        ]
+      }
+    },
+    {
+      "name": "Unavailable core adapter is named without an unusable invocation",
+      "message": "Ship the accepted parser fix through the repository's completion boundary.",
+      "facts": {
+        "bounded_code_outcome": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "availability-gap",
+        "named_route": "/ship",
+        "recommendations": []
+      }
     },
     {
       "name": "Exact Orchestrator revision campaign enters Improve",
+      "message": "Evaluate and improve Ship revision abc123 within this bounded trial.",
       "facts": {
         "exact_revision_campaign": true
       },
-      "expected_route": "/improve"
+      "available_capabilities": [
+        "improve"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$improve"
+        ]
+      }
     },
     {
       "name": "Controlled public identity deployment stays with public presence",
+      "message": "Deploy the approved correction to Acme's controlled public identity.",
       "facts": {
         "bounded_code_outcome": true,
         "controlled_public_identity": true
       },
-      "expected_route": "/manage-public-presence"
+      "available_capabilities": [
+        "manage-public-presence",
+        "ship"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$manage-public-presence"
+        ]
+      }
     }
   ],
   "orchestrator_precedence": [

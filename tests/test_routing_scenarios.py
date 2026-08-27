@@ -13,7 +13,7 @@ from scripts.validate_routing_skills import PUBLIC_SKILLS, Validation, validate_
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = json.loads((ROOT / "tests" / "routing_scenarios.json").read_text(encoding="utf-8"))
-PUBLIC_ROUTES = {f"/{name}" for name in PUBLIC_SKILLS if name != "ask-jeevan"}
+CORE_CAPABILITIES = {f"${name}" for name in PUBLIC_SKILLS if name != "ask-jeevan"}
 DESTINATION_EVENTS = {
     "credential",
     "mfa",
@@ -28,21 +28,69 @@ DESTINATION_EVENTS = {
 
 
 class RoutingScenarioTests(unittest.TestCase):
-    def test_ask_jeevan_scenarios_cover_route_and_precedence_invariants(self) -> None:
-        seen_routes = {scenario["expected_route"] for scenario in SCENARIOS["ask_jeevan"]}
-        self.assertEqual(seen_routes, PUBLIC_ROUTES)
+    def test_ask_jeevan_contract_covers_conversation_capabilities_and_routes(self) -> None:
+        seen_core_capabilities = {
+            scenario["expected"]["recommendations"][0]
+            for scenario in SCENARIOS["ask_jeevan"]
+            if scenario["expected"]["recommendations"]
+            and scenario["expected"]["recommendations"][0] in CORE_CAPABILITIES
+        }
+        self.assertEqual(seen_core_capabilities, CORE_CAPABILITIES)
+        seen_specialist_capabilities = {
+            scenario["expected"]["recommendations"][0]
+            for scenario in SCENARIOS["ask_jeevan"]
+            if scenario["expected"]["recommendations"]
+            and scenario["expected"]["recommendations"][0] not in CORE_CAPABILITIES
+        }
+        self.assertTrue(seen_specialist_capabilities)
+        self.assertTrue(
+            all(capability.startswith("$") for capability in seen_specialist_capabilities)
+        )
 
         for scenario in SCENARIOS["ask_jeevan"]:
             with self.subTest(scenario=scenario["name"]):
                 facts = scenario["facts"]
-                expected = scenario["expected_route"]
-                self.assertIn(expected, PUBLIC_ROUTES)
-                if facts.get("controlled_public_identity") and not facts.get("live_wayfinding"):
-                    self.assertEqual(expected, "/manage-public-presence")
+                expected = scenario["expected"]
+                recommendations = expected["recommendations"]
+
+                self.assertTrue(scenario["message"].strip())
+                self.assertIn(
+                    expected["action"],
+                    {"conversation", "question", "recommend", "availability-gap"},
+                )
+                self.assertLessEqual(len(recommendations), 1)
+                self.assertEqual(expected["action"] == "recommend", len(recommendations) == 1)
+
+                if recommendations:
+                    self.assertIn(
+                        recommendations[0].removeprefix("$"),
+                        scenario["available_capabilities"],
+                    )
+
+                if facts.get("greeting") or facts.get("ordinary_question"):
+                    self.assertEqual(expected["action"], "conversation")
+                if facts.get("materially_ambiguous"):
+                    self.assertEqual(expected["action"], "question")
+                if facts.get("controlled_public_identity") and not facts.get("operational_wayfinding"):
+                    self.assertEqual(recommendations, ["$manage-public-presence"])
                 if facts.get("exact_revision_campaign") and not facts.get("lifecycle_rule_change"):
-                    self.assertEqual(expected, "/improve")
+                    self.assertEqual(recommendations, ["$improve"])
                 if facts.get("bounded_code_outcome") and len(facts) == 1:
-                    self.assertEqual(expected, "/ship")
+                    if "ship" in scenario["available_capabilities"]:
+                        self.assertEqual(recommendations, ["$ship"])
+                    else:
+                        self.assertEqual(expected["action"], "availability-gap")
+                        self.assertEqual(expected["named_route"], "/ship")
+                if facts.get("research_request"):
+                    if "research" in scenario["available_capabilities"]:
+                        self.assertEqual(recommendations, ["$research"])
+                    else:
+                        self.assertEqual(expected["action"], "availability-gap")
+                if facts.get("exploratory_idea"):
+                    self.assertEqual(recommendations, ["$grill-me"])
+                if facts.get("question_shaped"):
+                    self.assertEqual(expected["action"], "recommend")
+
 
 
     def test_orchestrator_lifecycle_precedence(self) -> None:

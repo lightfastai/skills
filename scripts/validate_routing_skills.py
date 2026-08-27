@@ -153,7 +153,7 @@ def validate_family(validation: Validation) -> None:
     ask_routes = set(re.findall(r"`(/[a-z][a-z0-9-]*)`", texts["ask-jeevan"]))
     validation.require(
         ask_routes == set(ROUTES),
-        "ask-jeevan: public flow must contain exactly the three approved routes",
+        "ask-jeevan: public flow must contain exactly the three Lightfast core routes",
     )
     validation.require(
         "ask matt" not in texts["ask-jeevan"].lower() and "matt pocock" not in texts["ask-jeevan"].lower(),
@@ -168,12 +168,12 @@ def validate_family(validation: Validation) -> None:
         scenarios = {}
     required_scenario_groups = {
         "ask_jeevan",
-            "orchestrator_precedence",
+        "orchestrator_precedence",
         "return_events",
     }
     validation.require(
         required_scenario_groups.issubset(scenarios),
-        "routing scenarios must cover composed recommendations, precedence, and returns",
+        "routing fixtures must cover advisory responses, lifecycle precedence, and returns",
     )
     scenario_names = [
         scenario["name"]
@@ -207,7 +207,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Validated 4 public skill packages, 3 public routes, and the routing scenario contract.")
+    print("Validated 4 public skill packages, 3 core routes, and the deterministic routing contract fixtures.")
     return 0
 
 

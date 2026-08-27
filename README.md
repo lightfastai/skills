@@ -6,28 +6,29 @@ Agent skills published by Lightfast. Compatible with the [Agent Skills](https://
 
 | Skill | Purpose |
 |---|---|
-| [`ask-jeevan`](skills/ask-jeevan/) | Explicit-only, stateless recommendation of one public Lightfast route. |
+| [`ask-jeevan`](skills/ask-jeevan/) | Explicit-only, stateless advice across available project capabilities and Lightfast core routes. |
 | [`ship`](skills/ship/) | Hand a bounded code-delivery outcome to the authoritative `ship` Orchestrator task. |
 | [`improve`](skills/improve/) | Hand an exact-revision Orchestrator improvement campaign to the authoritative `improve` task. |
 | [`manage-public-presence`](skills/manage-public-presence/) | Audit and manage controlled public identity across websites, source hosts, registries, profiles, search systems, and AI retrieval. |
 
 ## Install
 
-Install the complete public route set so every `$ask-jeevan` recommendation is
-available:
+Install all Lightfast core routes together:
 
 ```bash
 npx skills add lightfastai/skills --skill ask-jeevan ship improve manage-public-presence
 ```
 
-To install a single skill, keep only its name after `--skill`.
+To install a single skill, keep only its name after `--skill`. Optional project
+capabilities remain separately installed and discoverable by `$ask-jeevan`.
 
 ## Discovery and invocation
 
-Invoke `$ask-jeevan` explicitly when you want one recommendation from the
-public v1 map: `/ship`, `/improve`, or
-`/manage-public-presence`. It performs no effects and stops after giving the
-next invocation.
+Invoke `$ask-jeevan` explicitly when you want advisory routing. It responds
+naturally when no route is needed, may recommend one specialist capability
+that is actually available in the current project, and retains `/ship`,
+`/improve`, and `/manage-public-presence` as Lightfast core
+routes. It performs no effects and stops after at most one recommendation.
 
 The other published skills are available for implicit model discovery.
 `ship` and `improve` are public adapters: their packages here
@@ -43,12 +44,13 @@ LIGHTFAST_RUN_INSTALLER_TESTS=1 python3 -m unittest discover -s tests -v
 ```
 
 This deterministic local check validates package metadata, invocation policy,
-the public route set, forbidden runtime lookup paths, README discovery, and
-flow, lifecycle precedence, approval, and reconciliation invariants
-without binding them to headings or prose. The opt-in third command also uses
-the current Skills CLI to make a fresh copied installation, verify every source
-byte, and list all four installed packages. None of these checks adds a
-scheduled workflow.
+the core route set, forbidden runtime lookup paths, README discovery, and
+advisory, lifecycle precedence, approval, and reconciliation invariants without binding them to generated wording. The
+fixtures are deterministic contract data with fake user messages and native
+surface call transcripts. They do not execute a model or prove behavioral
+quality. The opt-in third command uses the current Skills CLI to make a fresh
+copied installation, verify every source byte, and list all four installed
+packages. None of these checks adds a scheduled workflow.
 
 ## Security
 
