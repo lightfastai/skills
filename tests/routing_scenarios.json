@@ -1,49 +1,221 @@
 {
   "ask_jeevan": [
     {
+      "name": "Greeting stays conversational",
+      "message": "Hello!",
+      "facts": {
+        "greeting": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "conversation",
+        "recommendations": []
+      }
+    },
+    {
+      "name": "Ordinary question stays conversational",
+      "message": "What does Lightfast mean by a Route Index?",
+      "facts": {
+        "ordinary_question": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "conversation",
+        "recommendations": []
+      }
+    },
+    {
+      "name": "Materially ambiguous intent asks one question",
+      "message": "Should I improve the continuity idea, research it, or start building it?",
+      "facts": {
+        "materially_ambiguous": true
+      },
+      "available_capabilities": [
+        "grill-me",
+        "research"
+      ],
+      "expected": {
+        "action": "question",
+        "recommendations": []
+      }
+    },
+    {
+      "name": "Exploratory idea uses an installed grilling specialist",
+      "message": "I have an idea for improving continuity. Help me pressure-test it before we choose what to do.",
+      "facts": {
+        "exploratory_idea": true
+      },
+      "available_capabilities": [
+        "grill-me",
+        "research"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$grill-me"
+        ]
+      }
+    },
+    {
+      "name": "Research request uses an installed research specialist",
+      "message": "Research how recent agent systems preserve continuity across conversations.",
+      "facts": {
+        "research_request": true
+      },
+      "available_capabilities": [
+        "research"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$research"
+        ]
+      }
+    },
+    {
+      "name": "Question-shaped actionable request still uses a specialist",
+      "message": "Which skill should I use to research continuity across conversations?",
+      "facts": {
+        "research_request": true,
+        "question_shaped": true
+      },
+      "available_capabilities": [
+        "research"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$research"
+        ]
+      }
+    },
+    {
+      "name": "Missing optional specialist is not assumed or substituted",
+      "message": "Research how recent agent systems preserve continuity across conversations.",
+      "facts": {
+        "research_request": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "availability-gap",
+        "recommendations": []
+      }
+    },
+    {
       "name": "Accepted code outcome enters Ship",
+      "message": "Ship the accepted parser fix through the repository's completion boundary.",
       "facts": {
         "bounded_code_outcome": true
       },
-      "expected_route": "/ship"
+      "available_capabilities": [
+        "ship"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$ship"
+        ]
+      }
+    },
+    {
+      "name": "Unavailable core adapter is named without an unusable invocation",
+      "message": "Ship the accepted parser fix through the repository's completion boundary.",
+      "facts": {
+        "bounded_code_outcome": true
+      },
+      "available_capabilities": [],
+      "expected": {
+        "action": "availability-gap",
+        "named_route": "/ship",
+        "recommendations": []
+      }
     },
     {
       "name": "Interrupted Ship work enters operational wayfinding",
+      "message": "Resume the interrupted parser delivery task and find its current native state.",
       "facts": {
         "bounded_code_outcome": true,
-        "live_wayfinding": true
+        "operational_wayfinding": true
       },
-      "expected_route": "/navigate"
+      "available_capabilities": [
+        "navigate",
+        "ship"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$navigate"
+        ]
+      }
+    },
+    {
+      "name": "Archived chat location enters operational wayfinding",
+      "message": "Find all archived chats where I explicitly wrote about continuity.",
+      "facts": {
+        "locate_archived_chat": true,
+        "operational_wayfinding": true
+      },
+      "available_capabilities": [
+        "navigate"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$navigate"
+        ]
+      }
     },
     {
       "name": "Exact Orchestrator revision campaign enters Improve",
+      "message": "Evaluate and improve Ship revision abc123 within this bounded trial.",
       "facts": {
         "exact_revision_campaign": true
       },
-      "expected_route": "/improve"
+      "available_capabilities": [
+        "improve"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$improve"
+        ]
+      }
     },
     {
       "name": "Lifecycle rule change takes precedence over exact revision evidence",
+      "message": "Use this revision evidence to change the rules for evaluating future Orchestrators.",
       "facts": {
         "exact_revision_campaign": true,
         "lifecycle_rule_change": true
       },
-      "expected_route": "/navigate"
+      "available_capabilities": [
+        "improve",
+        "navigate"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$navigate"
+        ]
+      }
     },
     {
       "name": "Controlled public identity deployment stays with public presence",
+      "message": "Deploy the approved correction to Acme's controlled public identity.",
       "facts": {
         "bounded_code_outcome": true,
         "controlled_public_identity": true
       },
-      "expected_route": "/manage-public-presence"
-    },
-    {
-      "name": "Uncertain destination enters Find a route",
-      "facts": {
-        "destination_uncertain": true
-      },
-      "expected_route": "/navigate"
+      "available_capabilities": [
+        "manage-public-presence",
+        "ship"
+      ],
+      "expected": {
+        "action": "recommend",
+        "recommendations": [
+          "$manage-public-presence"
+        ]
+      }
     }
   ],
   "navigate": [
@@ -427,6 +599,357 @@
         "action": "create",
         "selected_name": "Ship new parser",
         "route_index": "none"
+      }
+    }
+  ],
+  "conversation_task_locator": [
+    {
+      "name": "Unavailable archived ChatGPT chats do not trigger a scan of 394 archived Codex tasks",
+      "request": {
+        "surface": "chatgpt_chat",
+        "project": null,
+        "partitions": [
+          "archived"
+        ],
+        "all": true,
+        "requires_explicit_user_message": true
+      },
+      "surface_access": {
+        "chatgpt_chat": {
+          "archived": false
+        },
+        "codex_project_task": {
+          "archived": true,
+          "candidate_count": 394
+        }
+      },
+      "tool_schema": {
+        "supports_cursor": false,
+        "max_results": 100
+      },
+      "calls": [],
+      "candidates": [],
+      "expected": {
+        "action": "bounded-unavailable",
+        "selected_ids": [],
+        "partial": true
+      }
+    },
+    {
+      "name": "Accessible cursorless surface remains partial for an exhaustive request",
+      "request": {
+        "surface": "chatgpt_chat",
+        "project": null,
+        "partitions": [
+          "active"
+        ],
+        "all": true,
+        "requires_explicit_user_message": true
+      },
+      "surface_access": {
+        "chatgpt_chat": {
+          "active": true
+        }
+      },
+      "tool_schema": {
+        "supports_cursor": false,
+        "max_results": 100
+      },
+      "calls": [
+        {
+          "surface": "chatgpt_chat",
+          "project": null,
+          "partition": "active",
+          "cursor": null,
+          "limit": 100,
+          "response": {
+            "item_ids": [
+              "chat-active-4"
+            ],
+            "next_cursor": null
+          }
+        }
+      ],
+      "candidates": [
+        {
+          "id": "chat-active-4",
+          "name": "Current continuity chat",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "native_message",
+            "text": "I want continuity to preserve my recent decisions."
+          }
+        }
+      ],
+      "expected": {
+        "action": "report",
+        "selected_ids": [
+          "chat-active-4"
+        ],
+        "partial": true
+      }
+    },
+    {
+      "name": "All Query project conversations exhaust active and archived cursors",
+      "request": {
+        "surface": "codex_project_task",
+        "project": "query",
+        "partitions": [
+          "active",
+          "archived"
+        ],
+        "all": true,
+        "requires_explicit_user_message": true
+      },
+      "surface_access": {
+        "codex_project_task": {
+          "active": true,
+          "archived": true
+        }
+      },
+      "tool_schema": {
+        "supports_cursor": true,
+        "max_results": 2
+      },
+      "calls": [
+        {
+          "surface": "codex_project_task",
+          "project": "query",
+          "partition": "active",
+          "cursor": null,
+          "limit": 2,
+          "response": {
+            "item_ids": [
+              "query-active-1",
+              "summary-only"
+            ],
+            "next_cursor": "active:2"
+          }
+        },
+        {
+          "surface": "codex_project_task",
+          "project": "query",
+          "partition": "active",
+          "cursor": "active:2",
+          "limit": 2,
+          "response": {
+            "item_ids": [
+              "query-active-1"
+            ],
+            "next_cursor": null
+          }
+        },
+        {
+          "surface": "codex_project_task",
+          "project": "query",
+          "partition": "archived",
+          "cursor": null,
+          "limit": 2,
+          "response": {
+            "item_ids": [
+              "query-archived-1",
+              "quoted-document"
+            ],
+            "next_cursor": "archived:2"
+          }
+        },
+        {
+          "surface": "codex_project_task",
+          "project": "query",
+          "partition": "archived",
+          "cursor": "archived:2",
+          "limit": 2,
+          "response": {
+            "item_ids": [
+              "copied-message"
+            ],
+            "next_cursor": null
+          }
+        }
+      ],
+      "candidates": [
+        {
+          "id": "query-active-1",
+          "name": "Explore continuity",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "native_message",
+            "text": "I want to improve continuity across conversations."
+          }
+        },
+        {
+          "id": "query-archived-1",
+          "name": "Archive continuity notes",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "native_message",
+            "text": "Please learn from my recent continuity messages."
+          }
+        },
+        {
+          "id": "summary-only",
+          "name": "Generated continuity summary",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "assistant",
+            "source": "generated_summary",
+            "text": "The user wants better continuity."
+          }
+        },
+        {
+          "id": "quoted-document",
+          "name": "Quoted continuity brief",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "attached_document",
+            "text": "The attached brief says to improve continuity."
+          }
+        },
+        {
+          "id": "copied-message",
+          "name": "Copied continuity message",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "copied_message",
+            "text": "Copied from another person's conversation."
+          }
+        }
+      ],
+      "expected": {
+        "action": "report",
+        "selected_ids": [
+          "query-active-1",
+          "query-archived-1"
+        ],
+        "partial": false
+      }
+    },
+    {
+      "name": "Mixed Query partitions return accessible results and disclose the archive bound",
+      "request": {
+        "surface": "codex_project_task",
+        "project": "query",
+        "partitions": [
+          "active",
+          "archived"
+        ],
+        "all": true,
+        "requires_explicit_user_message": true
+      },
+      "surface_access": {
+        "codex_project_task": {
+          "active": true,
+          "archived": false
+        }
+      },
+      "tool_schema": {
+        "supports_cursor": true,
+        "max_results": 100
+      },
+      "calls": [
+        {
+          "surface": "codex_project_task",
+          "project": "query",
+          "partition": "active",
+          "cursor": null,
+          "limit": 100,
+          "response": {
+            "item_ids": [
+              "query-active-7"
+            ],
+            "next_cursor": null
+          }
+        }
+      ],
+      "candidates": [
+        {
+          "id": "query-active-7",
+          "name": "Current continuity work",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "native_message",
+            "text": "Let's keep improving continuity."
+          }
+        }
+      ],
+      "expected": {
+        "action": "report",
+        "selected_ids": [
+          "query-active-7"
+        ],
+        "partial": true
+      }
+    },
+    {
+      "name": "Runtime tool limit response bounds the corrected call",
+      "request": {
+        "surface": "codex_project_task",
+        "project": "query",
+        "partitions": [
+          "archived"
+        ],
+        "all": false,
+        "requires_explicit_user_message": true
+      },
+      "surface_access": {
+        "codex_project_task": {
+          "archived": true
+        }
+      },
+      "tool_schema": {
+        "supports_cursor": true,
+        "max_results": null
+      },
+      "calls": [
+        {
+          "surface": "codex_project_task",
+          "project": "query",
+          "partition": "archived",
+          "cursor": null,
+          "limit": 50,
+          "response": {
+            "error": "limit_exceeded",
+            "max_results": 25
+          }
+        },
+        {
+          "surface": "codex_project_task",
+          "project": "query",
+          "partition": "archived",
+          "cursor": null,
+          "limit": 25,
+          "response": {
+            "item_ids": [
+              "query-archived-88"
+            ],
+            "next_cursor": null
+          }
+        }
+      ],
+      "candidates": [
+        {
+          "id": "query-archived-88",
+          "name": "Archived routing discussion",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "native_message",
+            "text": "Find the messages where I described routing failures."
+          }
+        }
+      ],
+      "expected": {
+        "action": "report",
+        "selected_ids": [
+          "query-archived-88"
+        ],
+        "partial": false
       }
     }
   ],
