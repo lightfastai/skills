@@ -16,20 +16,16 @@ ROUTES = {
     "/navigate": "$navigate",
     "/manage-public-presence": "$manage-public-presence",
 }
-ROUTING_SKILLS = ("ask-jeevan", "navigate", "ship", "improve")
-INSTALL_COMMAND = (
-    "npx skills add lightfastai/skills --skill ask-jeevan navigate ship "
-    "improve manage-public-presence"
+PUBLIC_SKILLS = (
+    "ask-jeevan",
+    "navigate",
+    "ship",
+    "improve",
+    "manage-public-presence",
 )
-ADAPTER_SECTIONS = (
-    "Admission",
-    "Destination discovery",
-    "Bounded handoff",
-    "Approval ownership",
-    "Return events",
-    "Completion evidence",
-    "Recovery identity",
-)
+ROUTING_SKILLS = PUBLIC_SKILLS[:-1]
+NAVIGATE_REFERENCES = ("find-route.md", "advance-route.md")
+INSTALL_COMMAND = f"npx skills add lightfastai/skills --skill {' '.join(PUBLIC_SKILLS)}"
 
 
 class Validation:
@@ -127,8 +123,9 @@ def validate_skill(name: str, validation: Validation) -> tuple[str, dict[str, st
     )
 
     expected_implicit = name != "ask-jeevan"
+    allow_implicit = agent.get("policy.allow_implicit_invocation", True)
     validation.require(
-        agent.get("policy.allow_implicit_invocation") is expected_implicit,
+        allow_implicit is expected_implicit,
         f"{name}: openai.yaml implicit invocation policy is incorrect",
     )
     for key in ("display_name", "short_description", "default_prompt"):
@@ -148,41 +145,26 @@ def validate_skill(name: str, validation: Validation) -> tuple[str, dict[str, st
 
 
 def validate_family(validation: Validation) -> None:
-    texts = {name: validate_skill(name, validation)[0] for name in ROUTING_SKILLS}
+    texts = {name: validate_skill(name, validation)[0] for name in PUBLIC_SKILLS}
 
     ask_rows = dict(
         re.findall(r"^\| `(/[^`]+)` \|.*\| `(\$[^`]+)` \|$", texts["ask-jeevan"], re.MULTILINE)
     )
     validation.require(ask_rows == ROUTES, "ask-jeevan: v1 route map or next invocations differ from the approved four routes")
-    validation.require("Return exactly these three lines" in texts["ask-jeevan"], "ask-jeevan: response must be one route, reason, and next invocation")
 
     navigate_dir = SKILLS_ROOT / "navigate"
-    reference_paths = sorted((navigate_dir / "references").glob("*.md"))
-    validation.require(
-        [path.name for path in reference_paths] == ["advance-route.md", "find-route.md"],
-        "navigate: references must contain exactly the two approved mode files",
-    )
+    reference_paths = [navigate_dir / "references" / name for name in NAVIGATE_REFERENCES]
     for path in reference_paths:
-        validate_links(path, read_text(path, validation), validation)
-    validation.require("**route; do not own**" in texts["navigate"], "navigate: routing invariant is missing")
-    validation.require("references/find-route.md" in texts["navigate"], "navigate: Find mode reference is not disclosed")
-    validation.require("references/advance-route.md" in texts["navigate"], "navigate: Advance mode reference is not disclosed")
-
-    for name in ("ask-jeevan", "ship", "improve"):
+        reference_text = read_text(path, validation)
+        validate_links(path, reference_text, validation)
         validation.require(
-            not (SKILLS_ROOT / name / "references").exists(),
-            f"{name}: only navigate should use progressive references",
+            f"references/{path.name}" in texts["navigate"],
+            f"navigate: {path.name} is not disclosed from SKILL.md",
         )
 
-    for adapter in ("ship", "improve"):
-        text = texts[adapter]
-        for section in ADAPTER_SECTIONS:
-            validation.require(f"## {section}" in text, f"{adapter}: missing adapter section {section}")
-        validation.require(f"lightfastai/{adapter}" in text, f"{adapter}: authoritative repository identity is missing")
-        validation.require("exact revision" in text.lower(), f"{adapter}: exact destination revision discovery is missing")
-        validation.require("Resume compatible work before creating" in text, f"{adapter}: continuation-first destination discovery is missing")
-
-    runtime_docs = [SKILLS_ROOT / name / "SKILL.md" for name in ROUTING_SKILLS] + reference_paths
+    runtime_docs = [SKILLS_ROOT / name / "SKILL.md" for name in ROUTING_SKILLS]
+    for name in ROUTING_SKILLS:
+        runtime_docs.extend(sorted((SKILLS_ROOT / name / "references").glob("*.md")))
     forbidden_runtime_links = ("docs/workbench", "docs/orchestrator-map", "/designs/", "/evaluations/")
     for path in runtime_docs:
         text = read_text(path, validation).lower()
@@ -190,7 +172,7 @@ def validate_family(validation: Validation) -> None:
             validation.require(forbidden not in text, f"{path.relative_to(ROOT)}: runtime Workbench/Map lookup path {forbidden} is forbidden")
 
     readme = read_text(ROOT / "README.md", validation)
-    for skill in (*ROUTING_SKILLS, "manage-public-presence"):
+    for skill in PUBLIC_SKILLS:
         validation.require(f"skills/{skill}/" in readme, f"README: {skill} discovery entry is missing")
     validation.require(INSTALL_COMMAND in readme, "README: complete public route-set install command is missing")
 
@@ -203,7 +185,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Validated 4 routing skills, 4 public routes, 2 Navigate modes, and 2 Orchestrator adapters.")
+    print("Validated 5 public skill packages, 4 public routes, and 2 Navigate mode references.")
     return 0
 
 

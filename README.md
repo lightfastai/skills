@@ -42,8 +42,9 @@ python3 scripts/validate_routing_skills.py
 ```
 
 This deterministic local check validates package metadata, invocation policy,
-route and adapter integrity, progressive references, and README discovery. It
-does not consult a runtime registry or add a scheduled workflow.
+the public route map, progressive-reference links, forbidden runtime lookup
+paths, and README discovery. It does not consult a runtime registry or add a
+scheduled workflow.
 
 ## Security
 

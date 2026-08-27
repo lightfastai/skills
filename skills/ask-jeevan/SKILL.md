@@ -5,8 +5,6 @@ description: Recommend one route from the public Lightfast v1 route map. Invoke 
 
 # Ask Jeevan
 
-You do not need to remember every Lightfast route, so ask.
-
 This skill is a stateless, recommendation-only index. Use only the originating conversation and the request already in context. Do not inspect live systems, open or resume tasks, invoke the recommended skill, or perform any other effect.
 
 ## Route map

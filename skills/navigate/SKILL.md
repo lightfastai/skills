@@ -1,6 +1,6 @@
 ---
 name: navigate
-description: Route requests across Lightfast when the correct live skill, task, conversation, project, repository, system, adapter, or Orchestrator authority must be found, resumed, or advanced. Use for cross-system wayfinding and one-step handoffs; execution remains with the destination.
+description: Find, resume, or advance a live Lightfast route when the operational destination or authority is uncertain. Use for cross-system wayfinding and one-step handoffs; execution remains with the destination.
 ---
 
 # Navigate
@@ -22,7 +22,7 @@ Load only the selected mode reference.
 - Discover installed skills, live tasks and conversations, connected projects, repositories, systems, and public Orchestrator adapters from their current native surfaces. Verify a candidate's current instructions and availability instead of relying on a maintained exhaustive registry.
 - Prefer a compatible existing destination task and native artifacts over creating duplicates. Preserve user changes and unresolved ownership.
 - Treat each authority home as authoritative for its own work, approvals, and completion evidence. A route transfers no broader authority than the Query already carries.
-- Route Orchestrator design, creation, evaluation, conformance, or upgrade work to a task in the live `lightfastai/orchestrator` repository, whose current instructions own that lifecycle. The Workbench is a lifecycle destination, never a runtime lookup service: do not consult the Workbench or Orchestrator Map to resolve ordinary routes or run another Orchestrator.
+- Route work that designs or changes the rules for Orchestrator creation, evaluation, conformance, or upgrades to a task in the live `lightfastai/orchestrator` repository, whose current instructions own that lifecycle. Route a bounded evaluation or authorized improvement campaign for one exact Orchestrator revision through the live `improve` adapter. The Workbench is a lifecycle destination, never a runtime lookup service: do not consult the Workbench or Orchestrator Map to resolve ordinary routes or run another Orchestrator.
 - Use a live public adapter such as `ship` or `improve` to enter an Orchestrator runtime. The adapter in `lightfastai/skills` owns the public handoff contract; the destination Orchestrator repository owns admission and execution.
 - Complete at most one routing transition per invocation. Do not implement destination work, coordinate its plan, mirror its state, or declare its outcome complete.
 
@@ -34,4 +34,4 @@ When a result returns, reconcile it against the Query's original intent and link
 
 ## Response contract
 
-Identify the selected mode, one destination or transition, its live identity or link, the reason it fits, and any next gate. Keep sensitive operational metadata out of the response.
+Identify the selected mode. For a successful route, identify one destination or transition, its live identity or link, the reason it fits, and any next gate. For a routing question or blocker, identify the unresolved choice or reopening condition and the relevant live evidence. Keep sensitive operational metadata out of the response.

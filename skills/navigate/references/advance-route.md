@@ -17,7 +17,7 @@ Choose exactly one transition:
 - create one destination task when none is compatible and task creation is authorized;
 - send one bounded handoff or follow-up to the destination;
 - return one ordinary question, meaningful progress event, blocker, or result to the Query; or
-- redirect Orchestrator lifecycle work to a task in the authoritative `lightfastai/orchestrator` repository.
+- redirect work that designs or changes Orchestrator lifecycle rules to a task in the authoritative `lightfastai/orchestrator` repository.
 
 A new or resumed handoff carries the Query reference, requested outcome, resolved target scope, constraints and exclusions, explicitly requested consequential effects, current native evidence, unresolved gates, and the stable destination identity. Let the destination apply its own admission and instructions.
 

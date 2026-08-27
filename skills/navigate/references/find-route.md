@@ -11,7 +11,7 @@ Use this mode when the Query needs one live destination rather than an effect.
    - connected projects, repository hosts, and repository instructions;
    - available systems, apps, plugins, and provider capabilities; and
    - public Orchestrator adapters and their live destination repositories.
-3. Read only the metadata or instructions needed to distinguish plausible candidates. For Orchestrator lifecycle work, verify the live `lightfastai/orchestrator` repository as the destination; do not use its Workbench or Map as a runtime registry.
+3. Read only the metadata or instructions needed to distinguish plausible candidates. For work that designs or changes Orchestrator lifecycle rules, verify the live `lightfastai/orchestrator` repository as the destination; route a bounded evaluation or authorized improvement campaign for one exact Orchestrator revision through the live `improve` adapter. Do not use the Workbench or Map as a runtime registry.
 4. Select one route using this order of evidence:
    - compatible in-flight work with the same objective, scope, and authority;
    - a specific installed skill or adapter whose admission fits;
