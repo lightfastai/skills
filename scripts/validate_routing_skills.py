@@ -101,8 +101,12 @@ def parse_openai_yaml(path: Path, validation: Validation) -> dict[str, str | boo
 
 
 def validate_links(path: Path, text: str, validation: Validation) -> None:
-    for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", text):
-        if re.match(r"^[a-z]+://", target) or "<" in target or ">" in target:
+    prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", prose):
+        target = target.strip()
+        if target.startswith("<") and target.endswith(">"):
+            target = target[1:-1]
+        if re.match(r"^[a-z]+://", target):
             continue
         resolved = (path.parent / target.split("#", 1)[0]).resolve()
         validation.require(resolved.exists(), f"{path.relative_to(ROOT)}: broken link {target}")
@@ -158,22 +162,6 @@ def validate_family(validation: Validation) -> None:
         "ask-jeevan: upstream structural baselines must not become runtime dependencies",
     )
 
-    navigate = texts["navigate"].lower()
-    for concept in (
-        "route; do not own",
-        "human-readable name",
-        "native identities",
-        "route index",
-        "append-only",
-        "frontier",
-        "routing fog",
-        "not yet specified",
-        "out of scope",
-        "~/.codex/query/routes.md",
-        "one bounded routing transition",
-    ):
-        validation.require(concept in navigate, f"navigate: missing structural concept {concept}")
-
     scenario_text = read_text(SCENARIO_PATH, validation)
     try:
         scenarios = json.loads(scenario_text) if scenario_text else {}
@@ -224,7 +212,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Validated 5 public skill packages, 4 public routes, Navigate structure, and realistic scenario coverage.")
+    print("Validated 5 public skill packages, 4 public routes, and the routing scenario contract.")
     return 0
 
 

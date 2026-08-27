@@ -43,13 +43,16 @@ remain authoritative for execution and completion.
 ```bash
 python3 scripts/validate_routing_skills.py
 python3 -m unittest discover -s tests -v
+LIGHTFAST_RUN_INSTALLER_TESTS=1 python3 -m unittest discover -s tests -v
 ```
 
 This deterministic local check validates package metadata, invocation policy,
-the public route set, Navigate's visible routing architecture, forbidden
-runtime lookup paths, README discovery, and realistic flow, frontier, Route
-Index, approval, recovery, and reconciliation scenarios. It does not consult a
-runtime registry or add a scheduled workflow.
+the public route set, forbidden runtime lookup paths, README discovery, and
+flow, frontier, Route Index, approval, recovery, and reconciliation invariants
+without binding them to headings or prose. The opt-in third command also uses
+the current Skills CLI to make a fresh copied installation, verify every source
+byte, and list all five installed packages. None of these checks adds a
+scheduled workflow.
 
 ## Security
 

@@ -21,7 +21,7 @@ Names make the route legible. Native identities make it recoverable. A route's i
 
 ## The Route Index
 
-Most routing is direct and needs no artifact. When work genuinely spans multiple tasks, conversations, repositories, systems, or context windows, use one native Codex task named **Route Index: &lt;destination&gt;** as the canonical low-resolution routing artifact. Search for a compatible Route Index task before creating one. Task creation must be authorized.
+Most routing is direct and needs no artifact. When cross-context continuity genuinely needs a durable rediscovery spine, use one native Codex task named **Route Index: &lt;destination&gt;** as the canonical low-resolution routing artifact. Merely spanning multiple tasks, conversations, repositories, systems, or context windows does not require one when the originating Query can still recover the route. Search for a compatible Route Index task before creating one. Task creation must be authorized.
 
 The Route Index is an **index, not a store**. Its native conversation is append-only: the opening message names the destination and boundaries, then later messages append route entries and state observations. Earlier messages remain unchanged. The destination task, repository, project, or system remains authoritative for live detail; the index holds a gist and a pointer, never a copy of destination state or authority.
 
@@ -64,7 +64,7 @@ Use only fields that help rediscover or choose a transition. Detailed plans, cre
 
 ### Local rediscovery aid
 
-With explicit user consent for this effort, Navigate may maintain `~/.codex/query/routes.md` as a local rediscovery aid. Each line contains only a human-readable name, native task ID, short outcome gist, and state:
+With explicit user consent naming this effort and `~/.codex/query/routes.md`, Navigate may maintain that file as a local rediscovery aid. Consent permits the aid but does not make it necessary; use it only when the user also wants local rediscovery. Each line contains only a human-readable name, native task ID, short outcome gist, and state:
 
 ```markdown
 - <name> | <task ID> | <short outcome gist> | <state>

@@ -57,6 +57,7 @@
         "authority": "principal-admin",
         "exact_revision": "",
         "multi_context": false,
+        "continuity_warrants_index": false,
         "task_creation_authorized": true
       },
       "candidates": [
@@ -81,7 +82,54 @@
       }
     },
     {
-      "name": "Multi-context Find establishes one native Route Index",
+      "name": "Find discovers a route from a destination-uncertain Query",
+      "mode": "find",
+      "query": {
+        "route": "",
+        "objective": "Audit Acme public identity",
+        "scope": "principal:acme",
+        "authority": "principal-admin",
+        "exact_revision": "",
+        "multi_context": false,
+        "continuity_warrants_index": false,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Ship unrelated dashboard",
+          "url": "https://tasks.example/ship-dashboard",
+          "task_id": "ship-17",
+          "route": "/ship",
+          "objective": "Ship analytics dashboard",
+          "scope": "repo:analytics",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@987fed",
+          "existing": true,
+          "takeable": true,
+          "conflict": false
+        },
+        {
+          "name": "Manage Acme public identity",
+          "url": "https://tasks.example/manage-acme",
+          "task_id": "presence-3",
+          "route": "/manage-public-presence",
+          "objective": "Audit Acme public identity",
+          "scope": "principal:acme",
+          "authority": "principal-admin",
+          "exact_revision": "",
+          "existing": true,
+          "takeable": true,
+          "conflict": false
+        }
+      ],
+      "expected": {
+        "action": "recommend",
+        "selected_name": "Manage Acme public identity",
+        "route_index": "none"
+      }
+    },
+    {
+      "name": "Continuity-warranted Find establishes one native Route Index",
       "mode": "find",
       "query": {
         "route": "/ship",
@@ -90,6 +138,7 @@
         "authority": "repo-maintainer",
         "exact_revision": "ship@abc123",
         "multi_context": true,
+        "continuity_warrants_index": true,
         "task_creation_authorized": true
       },
       "candidates": [
@@ -123,6 +172,7 @@
         "authority": "repo-maintainer",
         "exact_revision": "ship@abc123",
         "multi_context": true,
+        "continuity_warrants_index": true,
         "task_creation_authorized": true
       },
       "candidates": [
@@ -169,6 +219,7 @@
         "authority": "evaluation-only",
         "exact_revision": "ship@def456",
         "multi_context": true,
+        "continuity_warrants_index": true,
         "task_creation_authorized": true
       },
       "candidates": [
@@ -215,6 +266,7 @@
         "authority": "repo-maintainer",
         "exact_revision": "ship@abc123",
         "multi_context": false,
+        "continuity_warrants_index": false,
         "task_creation_authorized": true
       },
       "candidates": [
@@ -252,6 +304,70 @@
       }
     },
     {
+      "name": "Blocked compatible native work prevents competing creation",
+      "mode": "advance",
+      "query": {
+        "route": "/ship",
+        "objective": "Ship billing release",
+        "scope": "repo:billing",
+        "authority": "repo-maintainer",
+        "exact_revision": "ship@abc123",
+        "query_id": "query-billing-77",
+        "destination_id": "",
+        "native_artifacts": [
+          "https://github.com/example/billing/pull/77"
+        ],
+        "multi_context": false,
+        "continuity_warrants_index": false,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Ship billing release",
+          "url": "https://tasks.example/billing-release",
+          "task_id": "ship-77",
+          "route": "/ship",
+          "objective": "Ship billing release",
+          "scope": "repo:billing",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "query_id": "query-billing-77",
+          "destination_id": "ship-77",
+          "native_artifacts": [
+            "https://github.com/example/billing/pull/77"
+          ],
+          "existing": true,
+          "takeable": false,
+          "conflict": false,
+          "reopening_condition": "Required repository review completes"
+        },
+        {
+          "name": "New billing release destination",
+          "url": "https://tasks.example/new-billing-release",
+          "task_id": "",
+          "route": "/ship",
+          "objective": "Ship billing release",
+          "scope": "repo:billing",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "query_id": "query-billing-77",
+          "destination_id": "",
+          "native_artifacts": [
+            "https://github.com/example/billing/pull/77"
+          ],
+          "existing": false,
+          "takeable": true,
+          "conflict": false,
+          "reopening_condition": ""
+        }
+      ],
+      "expected": {
+        "action": "block",
+        "selected_name": "Ship billing release",
+        "route_index": "none"
+      }
+    },
+    {
       "name": "Advance creates only when no compatible task exists",
       "mode": "advance",
       "query": {
@@ -260,10 +376,34 @@
         "scope": "repo:parser",
         "authority": "repo-maintainer",
         "exact_revision": "ship@abc123",
+        "query_id": "query-parser-88",
+        "destination_id": "",
+        "native_artifacts": [
+          "https://github.com/example/parser/pull/88"
+        ],
         "multi_context": false,
+        "continuity_warrants_index": false,
         "task_creation_authorized": true
       },
       "candidates": [
+        {
+          "name": "Ship new parser from prior artifacts",
+          "url": "https://tasks.example/prior-parser",
+          "task_id": "ship-63",
+          "route": "/ship",
+          "objective": "Ship new parser",
+          "scope": "repo:parser",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "query_id": "query-parser-63",
+          "destination_id": "ship-63",
+          "native_artifacts": [
+            "https://github.com/example/parser/pull/63"
+          ],
+          "existing": true,
+          "takeable": true,
+          "conflict": false
+        },
         {
           "name": "Ship new parser",
           "url": "https://tasks.example/parser-capability",
@@ -273,6 +413,11 @@
           "scope": "repo:parser",
           "authority": "repo-maintainer",
           "exact_revision": "ship@abc123",
+          "query_id": "query-parser-88",
+          "destination_id": "",
+          "native_artifacts": [
+            "https://github.com/example/parser/pull/88"
+          ],
           "existing": false,
           "takeable": true,
           "conflict": false
@@ -303,21 +448,45 @@
     {
       "name": "Direct route does not create persistence",
       "multi_context": false,
+      "continuity_warrants_index": false,
       "local_consent": true,
+      "local_aid_selected": true,
+      "expected_native_index": false,
+      "expected_local_aid": false
+    },
+    {
+      "name": "Cross-context work alone does not require a Route Index",
+      "multi_context": true,
+      "continuity_warrants_index": false,
+      "local_consent": true,
+      "local_aid_selected": true,
       "expected_native_index": false,
       "expected_local_aid": false
     },
     {
       "name": "Native index does not imply local persistence",
       "multi_context": true,
+      "continuity_warrants_index": true,
       "local_consent": false,
+      "local_aid_selected": true,
       "expected_native_index": true,
       "expected_local_aid": false
     },
     {
-      "name": "Consented local aid keeps only four rediscovery fields",
+      "name": "Consent permits but does not select the optional local aid",
       "multi_context": true,
+      "continuity_warrants_index": true,
       "local_consent": true,
+      "local_aid_selected": false,
+      "expected_native_index": true,
+      "expected_local_aid": false
+    },
+    {
+      "name": "Consented and selected local aid keeps only four rediscovery fields",
+      "multi_context": true,
+      "continuity_warrants_index": true,
+      "local_consent": true,
+      "local_aid_selected": true,
       "local_entry": {
         "name": "Ship authentication rollout",
         "task_id": "ship-42",
@@ -331,7 +500,9 @@
     {
       "name": "Local aid rejects copied authority metadata",
       "multi_context": true,
+      "continuity_warrants_index": true,
       "local_consent": true,
+      "local_aid_selected": true,
       "local_entry": {
         "name": "Ship authentication rollout",
         "task_id": "ship-42",
@@ -346,14 +517,27 @@
   ],
   "route_index_history": {
     "task_id": "ship-42",
-    "events": [
+    "prior_events": [
       {
+        "observation_id": "route-observation-1",
         "state": "takeable"
       },
       {
+        "observation_id": "route-observation-2",
+        "state": "active"
+      }
+    ],
+    "after_append": [
+      {
+        "observation_id": "route-observation-1",
+        "state": "takeable"
+      },
+      {
+        "observation_id": "route-observation-2",
         "state": "active"
       },
       {
+        "observation_id": "route-observation-3",
         "state": "completed"
       }
     ],
