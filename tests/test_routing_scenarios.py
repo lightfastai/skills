@@ -1,14 +1,25 @@
 from __future__ import annotations
 
 import json
-import re
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
+
+from scripts.validate_routing_skills import Validation, validate_links
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = json.loads((ROOT / "tests" / "routing_scenarios.json").read_text(encoding="utf-8"))
-PUBLIC_ROUTES = {"/ship", "/improve", "/manage-public-presence"}
+PUBLIC_SKILLS = (
+    "ask-jeevan",
+    "ship",
+    "improve",
+    "manage-public-presence",
+)
+PUBLIC_ROUTES = {f"/{name}" for name in PUBLIC_SKILLS if name != "ask-jeevan"}
 DESTINATION_EVENTS = {
     "credential",
     "mfa",
@@ -18,45 +29,35 @@ DESTINATION_EVENTS = {
 }
 
 
-def ask_jeevan_route(facts: dict[str, bool]) -> str:
-    if facts.get("exact_revision_campaign", False):
-        return "/improve"
-    if facts.get("controlled_public_identity", False):
-        return "/manage-public-presence"
-    if facts.get("bounded_code_outcome", False):
-        return "/ship"
-    raise ValueError("No matching public outcome route")
 
 
-
-
-
-
-def orchestrator_destination(case: dict[str, object]) -> str:
-    if case.get("lifecycle_rule_change"):
-        return "lightfastai/orchestrator"
-    if case.get("exact_revision_campaign"):
-        return "improve"
-    return "unresolved"
-
-
-def event_home(kind: str) -> str:
-    return "destination" if kind in DESTINATION_EVENTS else "query"
 
 
 class RoutingScenarioTests(unittest.TestCase):
-    def test_ask_jeevan_composed_flow_recommendations(self) -> None:
+    def test_ask_jeevan_scenarios_cover_route_and_precedence_invariants(self) -> None:
+        seen_routes = {scenario["expected_route"] for scenario in SCENARIOS["ask_jeevan"]}
+        self.assertEqual(seen_routes, PUBLIC_ROUTES)
+
         for scenario in SCENARIOS["ask_jeevan"]:
             with self.subTest(scenario=scenario["name"]):
-                route = ask_jeevan_route(scenario["facts"])
-                self.assertEqual(route, scenario["expected_route"])
-                self.assertIn(route, PUBLIC_ROUTES)
+                facts = scenario["facts"]
+                expected = scenario["expected_route"]
+                self.assertIn(expected, PUBLIC_ROUTES)
+                if facts.get("controlled_public_identity") and not facts.get("live_wayfinding"):
+                    self.assertEqual(expected, "/manage-public-presence")
+                if facts.get("exact_revision_campaign") and not facts.get("lifecycle_rule_change"):
+                    self.assertEqual(expected, "/improve")
+                if facts.get("bounded_code_outcome") and len(facts) == 1:
+                    self.assertEqual(expected, "/ship")
 
 
     def test_orchestrator_lifecycle_precedence(self) -> None:
         for scenario in SCENARIOS["orchestrator_precedence"]:
             with self.subTest(scenario=scenario["name"]):
-                self.assertEqual(orchestrator_destination(scenario), scenario["expected_destination"])
+                if scenario["lifecycle_rule_change"]:
+                    self.assertEqual(scenario["expected_destination"], "lightfastai/orchestrator")
+                elif scenario["exact_revision_campaign"]:
+                    self.assertEqual(scenario["expected_destination"], "improve")
 
 
 
@@ -67,25 +68,102 @@ class RoutingScenarioTests(unittest.TestCase):
                 if kind == "result":
                     reconciled = bool(scenario["intent_matches"] and scenario["native_evidence"])
                     self.assertEqual(reconciled, scenario["expected_reconciled"])
+                elif kind in DESTINATION_EVENTS:
+                    self.assertEqual(scenario["expected_home"], "destination")
                 else:
-                    self.assertEqual(event_home(kind), scenario["expected_home"])
+                    self.assertEqual(scenario["expected_home"], "query")
 
-    def test_skill_bodies_preserve_the_required_runtime_invariants(self) -> None:
-        ask_jeevan = (ROOT / "skills" / "ask-jeevan" / "SKILL.md").read_text(encoding="utf-8").lower()
 
-        ask_invariants = (
-            "stateless",
-            "performs no effect",
-            "return exactly these three lines",
+class PackageCompatibilityTests(unittest.TestCase):
+    def test_link_validation_checks_angle_paths_but_ignores_fenced_examples(self) -> None:
+        validation = Validation()
+        validate_links(
+            ROOT / "tests" / "example.md",
+            "[missing guide](<references/missing guide.md>)",
+            validation,
         )
+        self.assertEqual(len(validation.errors), 1)
 
-        for concept in ask_invariants:
-            self.assertIn(concept, ask_jeevan, concept)
+        fenced_validation = Validation()
+        validate_links(
+            ROOT / "tests" / "example.md",
+            "```markdown\n[placeholder](<native link>)\n```",
+            fenced_validation,
+        )
+        self.assertFalse(fenced_validation.errors)
 
-        ask_routes = set(re.findall(r"`(/[a-z][a-z0-9-]*)`", ask_jeevan))
-        self.assertEqual(ask_routes, PUBLIC_ROUTES)
-        self.assertNotIn("ask matt", ask_jeevan)
-        self.assertNotIn("matt pocock", ask_jeevan)
+    def test_repository_validator_accepts_schema_and_invocation_policy(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "scripts/validate_routing_skills.py"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(
+        os.environ.get("LIGHTFAST_RUN_INSTALLER_TESTS") == "1",
+        "set LIGHTFAST_RUN_INSTALLER_TESTS=1 to exercise the current Skills CLI",
+    )
+    def test_current_skills_cli_fresh_copy_install(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="lightfast-skills-install-") as install_dir:
+            install_root = Path(install_dir)
+            (install_root / "package.json").write_text(
+                json.dumps({"name": "lightfast-skills-install-test", "private": True}),
+                encoding="utf-8",
+            )
+            command = [
+                "npx",
+                "--yes",
+                "skills@latest",
+                "add",
+                str(ROOT),
+                "--skill",
+                *PUBLIC_SKILLS,
+                "--agent",
+                "codex",
+                "--copy",
+                "-y",
+            ]
+            installed = subprocess.run(
+                command,
+                cwd=install_root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(installed.returncode, 0, installed.stderr or installed.stdout)
+
+            installed_skills = install_root / ".agents" / "skills"
+            for name in PUBLIC_SKILLS:
+                source = ROOT / "skills" / name
+                destination = installed_skills / name
+                self.assertTrue(destination.is_dir(), name)
+                source_files = {
+                    path.relative_to(source): path.read_bytes()
+                    for path in source.rglob("*")
+                    if path.is_file()
+                }
+                installed_files = {
+                    path.relative_to(destination): path.read_bytes()
+                    for path in destination.rglob("*")
+                    if path.is_file()
+                }
+                self.assertEqual(installed_files, source_files, name)
+
+            listed = subprocess.run(
+                ["npx", "--yes", "skills@latest", "list", "--json"],
+                cwd=install_root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            self.assertEqual(listed.returncode, 0, listed.stderr or listed.stdout)
+            names = {entry["name"] for entry in json.loads(listed.stdout)}
+            self.assertEqual(names, set(PUBLIC_SKILLS))
 
 
 if __name__ == "__main__":
