@@ -1,4 +1,0 @@
-interface:
-  display_name: "Orchestrate"
-  short_description: "Coordinate one chartered programme"
-  default_prompt: "Use $orchestrate to resolve one registered charter, recover its programme from durable evidence, and request its next bounded effect without implementing in the root task."
