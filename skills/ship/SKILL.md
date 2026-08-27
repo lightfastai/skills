@@ -45,7 +45,7 @@ Ordinary product questions, meaningful progress, non-sensitive blockers, and res
 
 ## Return events
 
-Return at most one event per routing transition:
+After a destination exists, return at most one event per routing transition:
 
 - **Question:** one ordinary decision, with the destination task link.
 - **Progress:** one meaningful milestone backed by target-native evidence.

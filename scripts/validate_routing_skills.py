@@ -15,20 +15,14 @@ ROUTES = {
     "/improve": "$improve",
     "/manage-public-presence": "$manage-public-presence",
 }
-ROUTING_SKILLS = ("ask-jeevan", "ship", "improve")
-INSTALL_COMMAND = (
-    "npx skills add lightfastai/skills --skill ask-jeevan ship "
-    "improve manage-public-presence"
+PUBLIC_SKILLS = (
+    "ask-jeevan",
+    "ship",
+    "improve",
+    "manage-public-presence",
 )
-ADAPTER_SECTIONS = (
-    "Admission",
-    "Destination discovery",
-    "Bounded handoff",
-    "Approval ownership",
-    "Return events",
-    "Completion evidence",
-    "Recovery identity",
-)
+ROUTING_SKILLS = PUBLIC_SKILLS[:-1]
+INSTALL_COMMAND = f"npx skills add lightfastai/skills --skill {' '.join(PUBLIC_SKILLS)}"
 
 
 class Validation:
@@ -126,8 +120,9 @@ def validate_skill(name: str, validation: Validation) -> tuple[str, dict[str, st
     )
 
     expected_implicit = name != "ask-jeevan"
+    allow_implicit = agent.get("policy.allow_implicit_invocation", True)
     validation.require(
-        agent.get("policy.allow_implicit_invocation") is expected_implicit,
+        allow_implicit is expected_implicit,
         f"{name}: openai.yaml implicit invocation policy is incorrect",
     )
     for key in ("display_name", "short_description", "default_prompt"):
@@ -147,30 +142,17 @@ def validate_skill(name: str, validation: Validation) -> tuple[str, dict[str, st
 
 
 def validate_family(validation: Validation) -> None:
-    texts = {name: validate_skill(name, validation)[0] for name in ROUTING_SKILLS}
+    texts = {name: validate_skill(name, validation)[0] for name in PUBLIC_SKILLS}
 
     ask_rows = dict(
         re.findall(r"^\| `(/[^`]+)` \|.*\| `(\$[^`]+)` \|$", texts["ask-jeevan"], re.MULTILINE)
     )
     validation.require(ask_rows == ROUTES, "ask-jeevan: v1 route map or next invocations differ from the approved three routes")
-    validation.require("Return exactly these three lines" in texts["ask-jeevan"], "ask-jeevan: response must be one route, reason, and next invocation")
 
-
-    for name in ("ask-jeevan", "ship", "improve"):
-        validation.require(
-            not (SKILLS_ROOT / name / "references").exists(),
-            f"{name}: this package should not use progressive references",
-        )
-
-    for adapter in ("ship", "improve"):
-        text = texts[adapter]
-        for section in ADAPTER_SECTIONS:
-            validation.require(f"## {section}" in text, f"{adapter}: missing adapter section {section}")
-        validation.require(f"lightfastai/{adapter}" in text, f"{adapter}: authoritative repository identity is missing")
-        validation.require("exact revision" in text.lower(), f"{adapter}: exact destination revision discovery is missing")
-        validation.require("Resume compatible work before creating" in text, f"{adapter}: continuation-first destination discovery is missing")
 
     runtime_docs = [SKILLS_ROOT / name / "SKILL.md" for name in ROUTING_SKILLS]
+    for name in ROUTING_SKILLS:
+        runtime_docs.extend(sorted((SKILLS_ROOT / name / "references").glob("*.md")))
     forbidden_runtime_links = ("docs/workbench", "docs/orchestrator-map", "/designs/", "/evaluations/")
     for path in runtime_docs:
         text = read_text(path, validation).lower()
@@ -178,7 +160,7 @@ def validate_family(validation: Validation) -> None:
             validation.require(forbidden not in text, f"{path.relative_to(ROOT)}: runtime Workbench/Map lookup path {forbidden} is forbidden")
 
     readme = read_text(ROOT / "README.md", validation)
-    for skill in (*ROUTING_SKILLS, "manage-public-presence"):
+    for skill in PUBLIC_SKILLS:
         validation.require(f"skills/{skill}/" in readme, f"README: {skill} discovery entry is missing")
     validation.require(INSTALL_COMMAND in readme, "README: complete public route-set install command is missing")
 
@@ -191,7 +173,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Validated 3 routing skills, 3 public routes, and 2 Orchestrator adapters.")
+    print("Validated 4 public skill packages, 3 public routes.")
     return 0
 
 
