@@ -1,0 +1,6 @@
+interface:
+  display_name: "Ship with Lightfast"
+  short_description: "Route a bounded code outcome to Ship"
+  default_prompt: "Use $ship to hand this bounded code-delivery outcome to the authoritative Ship task."
+policy:
+  allow_implicit_invocation: true
