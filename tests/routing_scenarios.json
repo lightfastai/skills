@@ -1,0 +1,410 @@
+{
+  "ask_jeevan": [
+    {
+      "name": "Accepted code outcome enters Ship",
+      "facts": {
+        "bounded_code_outcome": true
+      },
+      "expected_route": "/ship"
+    },
+    {
+      "name": "Interrupted Ship work enters operational wayfinding",
+      "facts": {
+        "bounded_code_outcome": true,
+        "live_wayfinding": true
+      },
+      "expected_route": "/navigate"
+    },
+    {
+      "name": "Exact Orchestrator revision campaign enters Improve",
+      "facts": {
+        "exact_revision_campaign": true
+      },
+      "expected_route": "/improve"
+    },
+    {
+      "name": "Lifecycle rule change takes precedence over exact revision evidence",
+      "facts": {
+        "exact_revision_campaign": true,
+        "lifecycle_rule_change": true
+      },
+      "expected_route": "/navigate"
+    },
+    {
+      "name": "Controlled public identity deployment stays with public presence",
+      "facts": {
+        "bounded_code_outcome": true,
+        "controlled_public_identity": true
+      },
+      "expected_route": "/manage-public-presence"
+    },
+    {
+      "name": "Uncertain destination enters Find a route",
+      "facts": {
+        "destination_uncertain": true
+      },
+      "expected_route": "/navigate"
+    }
+  ],
+  "navigate": [
+    {
+      "name": "Trivial direct route needs no Route Index",
+      "mode": "find",
+      "query": {
+        "route": "/manage-public-presence",
+        "objective": "Audit Acme public identity",
+        "scope": "principal:acme",
+        "authority": "principal-admin",
+        "exact_revision": "",
+        "multi_context": false,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Manage Acme public identity",
+          "url": "https://tasks.example/manage-acme",
+          "task_id": "",
+          "route": "/manage-public-presence",
+          "objective": "Audit Acme public identity",
+          "scope": "principal:acme",
+          "authority": "principal-admin",
+          "exact_revision": "",
+          "existing": false,
+          "takeable": true,
+          "conflict": false
+        }
+      ],
+      "expected": {
+        "action": "recommend",
+        "selected_name": "Manage Acme public identity",
+        "route_index": "none"
+      }
+    },
+    {
+      "name": "Multi-context Find establishes one native Route Index",
+      "mode": "find",
+      "query": {
+        "route": "/ship",
+        "objective": "Ship authentication rollout",
+        "scope": "repo:auth-api",
+        "authority": "repo-maintainer",
+        "exact_revision": "ship@abc123",
+        "multi_context": true,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Ship authentication rollout",
+          "url": "https://tasks.example/ship-auth",
+          "task_id": "ship-42",
+          "route": "/ship",
+          "objective": "Ship authentication rollout",
+          "scope": "repo:auth-api",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "existing": true,
+          "takeable": true,
+          "conflict": false
+        }
+      ],
+      "expected": {
+        "action": "establish-index",
+        "selected_name": "Ship authentication rollout",
+        "route_index": "native"
+      }
+    },
+    {
+      "name": "Advance resumes compatible native work before creating",
+      "mode": "advance",
+      "query": {
+        "route": "/ship",
+        "objective": "Ship authentication rollout",
+        "scope": "repo:auth-api",
+        "authority": "repo-maintainer",
+        "exact_revision": "ship@abc123",
+        "multi_context": true,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Ship authentication rollout",
+          "url": "https://tasks.example/ship-auth",
+          "task_id": "ship-42",
+          "route": "/ship",
+          "objective": "Ship authentication rollout",
+          "scope": "repo:auth-api",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "existing": true,
+          "takeable": true,
+          "conflict": false
+        },
+        {
+          "name": "New Ship destination",
+          "url": "https://tasks.example/new-ship",
+          "task_id": "",
+          "route": "/ship",
+          "objective": "Ship authentication rollout",
+          "scope": "repo:auth-api",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "existing": false,
+          "takeable": true,
+          "conflict": false
+        }
+      ],
+      "expected": {
+        "action": "resume",
+        "selected_name": "Ship authentication rollout",
+        "route_index": "native"
+      }
+    },
+    {
+      "name": "Frontier skips a claimed transition",
+      "mode": "advance",
+      "query": {
+        "route": "/improve",
+        "objective": "Evaluate Ship revision",
+        "scope": "repo:ship",
+        "authority": "evaluation-only",
+        "exact_revision": "ship@def456",
+        "multi_context": true,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Claimed Ship evaluation",
+          "url": "https://tasks.example/claimed-eval",
+          "task_id": "improve-7",
+          "route": "/improve",
+          "objective": "Evaluate Ship revision",
+          "scope": "repo:ship",
+          "authority": "evaluation-only",
+          "exact_revision": "ship@def456",
+          "existing": true,
+          "takeable": false,
+          "conflict": false
+        },
+        {
+          "name": "Resumable Ship evaluation",
+          "url": "https://tasks.example/resumable-eval",
+          "task_id": "improve-8",
+          "route": "/improve",
+          "objective": "Evaluate Ship revision",
+          "scope": "repo:ship",
+          "authority": "evaluation-only",
+          "exact_revision": "ship@def456",
+          "existing": true,
+          "takeable": true,
+          "conflict": false
+        }
+      ],
+      "expected": {
+        "action": "resume",
+        "selected_name": "Resumable Ship evaluation",
+        "route_index": "native"
+      }
+    },
+    {
+      "name": "Overlapping writer blocks duplicate creation",
+      "mode": "advance",
+      "query": {
+        "route": "/ship",
+        "objective": "Ship billing fix",
+        "scope": "repo:billing",
+        "authority": "repo-maintainer",
+        "exact_revision": "ship@abc123",
+        "multi_context": false,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Conflicting billing delivery",
+          "url": "https://tasks.example/conflicting-billing",
+          "task_id": "ship-99",
+          "route": "/ship",
+          "objective": "Ship billing fix",
+          "scope": "repo:billing",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "existing": true,
+          "takeable": false,
+          "conflict": true
+        },
+        {
+          "name": "New billing destination",
+          "url": "https://tasks.example/new-billing",
+          "task_id": "",
+          "route": "/ship",
+          "objective": "Ship billing fix",
+          "scope": "repo:billing",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "existing": false,
+          "takeable": true,
+          "conflict": false
+        }
+      ],
+      "expected": {
+        "action": "block",
+        "selected_name": "Conflicting billing delivery",
+        "route_index": "none"
+      }
+    },
+    {
+      "name": "Advance creates only when no compatible task exists",
+      "mode": "advance",
+      "query": {
+        "route": "/ship",
+        "objective": "Ship new parser",
+        "scope": "repo:parser",
+        "authority": "repo-maintainer",
+        "exact_revision": "ship@abc123",
+        "multi_context": false,
+        "task_creation_authorized": true
+      },
+      "candidates": [
+        {
+          "name": "Ship new parser",
+          "url": "https://tasks.example/parser-capability",
+          "task_id": "",
+          "route": "/ship",
+          "objective": "Ship new parser",
+          "scope": "repo:parser",
+          "authority": "repo-maintainer",
+          "exact_revision": "ship@abc123",
+          "existing": false,
+          "takeable": true,
+          "conflict": false
+        }
+      ],
+      "expected": {
+        "action": "create",
+        "selected_name": "Ship new parser",
+        "route_index": "none"
+      }
+    }
+  ],
+  "orchestrator_precedence": [
+    {
+      "name": "Lifecycle rule change uses lifecycle authority",
+      "lifecycle_rule_change": true,
+      "exact_revision_campaign": true,
+      "expected_destination": "lightfastai/orchestrator"
+    },
+    {
+      "name": "Bounded exact revision campaign uses Improve",
+      "lifecycle_rule_change": false,
+      "exact_revision_campaign": true,
+      "expected_destination": "improve"
+    }
+  ],
+  "route_index": [
+    {
+      "name": "Direct route does not create persistence",
+      "multi_context": false,
+      "local_consent": true,
+      "expected_native_index": false,
+      "expected_local_aid": false
+    },
+    {
+      "name": "Native index does not imply local persistence",
+      "multi_context": true,
+      "local_consent": false,
+      "expected_native_index": true,
+      "expected_local_aid": false
+    },
+    {
+      "name": "Consented local aid keeps only four rediscovery fields",
+      "multi_context": true,
+      "local_consent": true,
+      "local_entry": {
+        "name": "Ship authentication rollout",
+        "task_id": "ship-42",
+        "outcome_gist": "Ship auth rollout",
+        "state": "active"
+      },
+      "expected_native_index": true,
+      "expected_local_aid": true,
+      "expected_local_entry_valid": true
+    },
+    {
+      "name": "Local aid rejects copied authority metadata",
+      "multi_context": true,
+      "local_consent": true,
+      "local_entry": {
+        "name": "Ship authentication rollout",
+        "task_id": "ship-42",
+        "outcome_gist": "Ship auth rollout",
+        "state": "active",
+        "authority_home": "repo:auth-api"
+      },
+      "expected_native_index": true,
+      "expected_local_aid": true,
+      "expected_local_entry_valid": false
+    }
+  ],
+  "route_index_history": {
+    "task_id": "ship-42",
+    "events": [
+      {
+        "state": "takeable"
+      },
+      {
+        "state": "active"
+      },
+      {
+        "state": "completed"
+      }
+    ],
+    "expected_event_count": 3,
+    "expected_latest_state": "completed"
+  },
+  "return_events": [
+    {
+      "name": "Ordinary product question may return through Query",
+      "kind": "ordinary_question",
+      "expected_home": "query"
+    },
+    {
+      "name": "Scope expansion stays in destination",
+      "kind": "scope_expansion",
+      "expected_home": "destination"
+    },
+    {
+      "name": "MFA stays in destination",
+      "kind": "mfa",
+      "expected_home": "destination"
+    },
+    {
+      "name": "Permission change stays in destination",
+      "kind": "permission_change",
+      "expected_home": "destination"
+    },
+    {
+      "name": "Evidence-backed matching result reconciles",
+      "kind": "result",
+      "intent_matches": true,
+      "native_evidence": [
+        "https://github.com/example/repo/pull/42"
+      ],
+      "expected_reconciled": true
+    },
+    {
+      "name": "Task completion without evidence does not reconcile",
+      "kind": "result",
+      "intent_matches": true,
+      "native_evidence": [],
+      "expected_reconciled": false
+    },
+    {
+      "name": "Evidence for a different intent does not reconcile",
+      "kind": "result",
+      "intent_matches": false,
+      "native_evidence": [
+        "https://github.com/example/repo/pull/99"
+      ],
+      "expected_reconciled": false
+    }
+  ]
+}
