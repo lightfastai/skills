@@ -1,0 +1,87 @@
+{
+  "ask_jeevan": [
+    {
+      "name": "Accepted code outcome enters Ship",
+      "facts": {
+        "bounded_code_outcome": true
+      },
+      "expected_route": "/ship"
+    },
+    {
+      "name": "Exact Orchestrator revision campaign enters Improve",
+      "facts": {
+        "exact_revision_campaign": true
+      },
+      "expected_route": "/improve"
+    },
+    {
+      "name": "Controlled public identity deployment stays with public presence",
+      "facts": {
+        "bounded_code_outcome": true,
+        "controlled_public_identity": true
+      },
+      "expected_route": "/manage-public-presence"
+    }
+  ],
+  "orchestrator_precedence": [
+    {
+      "name": "Lifecycle rule change uses lifecycle authority",
+      "lifecycle_rule_change": true,
+      "exact_revision_campaign": true,
+      "expected_destination": "lightfastai/orchestrator"
+    },
+    {
+      "name": "Bounded exact revision campaign uses Improve",
+      "lifecycle_rule_change": false,
+      "exact_revision_campaign": true,
+      "expected_destination": "improve"
+    }
+  ],
+  "return_events": [
+    {
+      "name": "Ordinary product question may return through Query",
+      "kind": "ordinary_question",
+      "expected_home": "query"
+    },
+    {
+      "name": "Scope expansion stays in destination",
+      "kind": "scope_expansion",
+      "expected_home": "destination"
+    },
+    {
+      "name": "MFA stays in destination",
+      "kind": "mfa",
+      "expected_home": "destination"
+    },
+    {
+      "name": "Permission change stays in destination",
+      "kind": "permission_change",
+      "expected_home": "destination"
+    },
+    {
+      "name": "Evidence-backed matching result reconciles",
+      "kind": "result",
+      "intent_matches": true,
+      "native_evidence": [
+        "https://github.com/example/repo/pull/42"
+      ],
+      "expected_reconciled": true
+    },
+    {
+      "name": "Task completion without evidence does not reconcile",
+      "kind": "result",
+      "intent_matches": true,
+      "native_evidence": [],
+      "expected_reconciled": false
+    },
+    {
+      "name": "Evidence for a different intent does not reconcile",
+      "kind": "result",
+      "intent_matches": false,
+      "native_evidence": [
+        "https://github.com/example/repo/pull/99"
+      ],
+      "expected_reconciled": false
+    }
+  ]
+}

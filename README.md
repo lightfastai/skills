@@ -30,19 +30,24 @@ public v1 map: `/ship`, `/improve`, or
 next invocation.
 
 The other published skills are available for implicit model discovery.
-`ship` and `improve` are public
-adapters: their packages here own the handoff contract, while their standalone
-Orchestrator repositories remain authoritative for execution and completion.
+`ship` and `improve` are public adapters: their packages here
+own the handoff contract, while their standalone Orchestrator repositories
+remain authoritative for execution and completion.
 
 ## Validate
 
 ```bash
 python3 scripts/validate_routing_skills.py
+python3 -m unittest discover -s tests -v
+LIGHTFAST_RUN_INSTALLER_TESTS=1 python3 -m unittest discover -s tests -v
 ```
 
 This deterministic local check validates package metadata, invocation policy,
-the public route map, progressive-reference links, forbidden runtime lookup
-paths, and README discovery. It does not consult a runtime registry or add a
+the public route set, forbidden runtime lookup paths, README discovery, and
+flow, lifecycle precedence, approval, and reconciliation invariants
+without binding them to headings or prose. The opt-in third command also uses
+the current Skills CLI to make a fresh copied installation, verify every source
+byte, and list all four installed packages. None of these checks adds a
 scheduled workflow.
 
 ## Security

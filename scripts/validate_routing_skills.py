@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -23,6 +24,7 @@ PUBLIC_SKILLS = (
 )
 ROUTING_SKILLS = PUBLIC_SKILLS[:-1]
 INSTALL_COMMAND = f"npx skills add lightfastai/skills --skill {' '.join(PUBLIC_SKILLS)}"
+SCENARIO_PATH = ROOT / "tests" / "routing_scenarios.json"
 
 
 class Validation:
@@ -97,7 +99,11 @@ def parse_openai_yaml(path: Path, validation: Validation) -> dict[str, str | boo
 
 
 def validate_links(path: Path, text: str, validation: Validation) -> None:
-    for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", text):
+    prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", prose):
+        target = target.strip()
+        if target.startswith("<") and target.endswith(">"):
+            target = target[1:-1]
         if re.match(r"^[a-z]+://", target):
             continue
         resolved = (path.parent / target.split("#", 1)[0]).resolve()
@@ -144,11 +150,39 @@ def validate_skill(name: str, validation: Validation) -> tuple[str, dict[str, st
 def validate_family(validation: Validation) -> None:
     texts = {name: validate_skill(name, validation)[0] for name in PUBLIC_SKILLS}
 
-    ask_rows = dict(
-        re.findall(r"^\| `(/[^`]+)` \|.*\| `(\$[^`]+)` \|$", texts["ask-jeevan"], re.MULTILINE)
+    ask_routes = set(re.findall(r"`(/[a-z][a-z0-9-]*)`", texts["ask-jeevan"]))
+    validation.require(
+        ask_routes == set(ROUTES),
+        "ask-jeevan: public flow must contain exactly the three approved routes",
     )
-    validation.require(ask_rows == ROUTES, "ask-jeevan: v1 route map or next invocations differ from the approved three routes")
+    validation.require(
+        "ask matt" not in texts["ask-jeevan"].lower() and "matt pocock" not in texts["ask-jeevan"].lower(),
+        "ask-jeevan: upstream structural baselines must not become runtime dependencies",
+    )
 
+    scenario_text = read_text(SCENARIO_PATH, validation)
+    try:
+        scenarios = json.loads(scenario_text) if scenario_text else {}
+    except json.JSONDecodeError as error:
+        validation.errors.append(f"{SCENARIO_PATH.relative_to(ROOT)}: invalid JSON: {error}")
+        scenarios = {}
+    required_scenario_groups = {
+        "ask_jeevan",
+            "orchestrator_precedence",
+        "return_events",
+    }
+    validation.require(
+        required_scenario_groups.issubset(scenarios),
+        "routing scenarios must cover composed recommendations, precedence, and returns",
+    )
+    scenario_names = [
+        scenario["name"]
+        for group, values in scenarios.items()
+        if isinstance(values, list)
+        for scenario in values
+        if isinstance(scenario, dict) and "name" in scenario
+    ]
+    validation.require(len(scenario_names) == len(set(scenario_names)), "routing scenario names must be unique")
 
     runtime_docs = [SKILLS_ROOT / name / "SKILL.md" for name in ROUTING_SKILLS]
     for name in ROUTING_SKILLS:
@@ -173,7 +207,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Validated 4 public skill packages, 3 public routes.")
+    print("Validated 4 public skill packages, 3 public routes, and the routing scenario contract.")
     return 0
 
 
