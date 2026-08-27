@@ -1,0 +1,6 @@
+interface:
+  display_name: "Improve with Lightfast"
+  short_description: "Route an Orchestrator improvement campaign"
+  default_prompt: "Use $improve to hand this bounded Orchestrator improvement campaign to the authoritative Improve task."
+policy:
+  allow_implicit_invocation: true
