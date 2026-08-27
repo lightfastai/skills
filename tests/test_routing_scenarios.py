@@ -8,17 +8,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.validate_routing_skills import Validation, validate_links
+from scripts.validate_routing_skills import PUBLIC_SKILLS, Validation, validate_links
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = json.loads((ROOT / "tests" / "routing_scenarios.json").read_text(encoding="utf-8"))
-PUBLIC_SKILLS = (
-    "ask-jeevan",
-    "ship",
-    "improve",
-    "manage-public-presence",
-)
 PUBLIC_ROUTES = {f"/{name}" for name in PUBLIC_SKILLS if name != "ask-jeevan"}
 DESTINATION_EVENTS = {
     "credential",
