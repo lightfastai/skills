@@ -14,7 +14,7 @@ from scripts.validate_routing_skills import PUBLIC_SKILLS, Validation, validate_
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIOS = json.loads((ROOT / "tests" / "routing_scenarios.json").read_text(encoding="utf-8"))
-PUBLIC_ROUTES = {f"/{name}" for name in PUBLIC_SKILLS if name != "ask-jeevan"}
+CORE_CAPABILITIES = {f"${name}" for name in PUBLIC_SKILLS if name != "ask-jeevan"}
 IDENTITY_FIELDS = (
     "route",
     "objective",
@@ -54,25 +54,71 @@ def selected_candidate(scenario: dict[str, object]) -> Optional[dict[str, object
 
 
 class RoutingScenarioTests(unittest.TestCase):
-    def test_ask_jeevan_scenarios_cover_route_and_precedence_invariants(self) -> None:
-        seen_routes = {scenario["expected_route"] for scenario in SCENARIOS["ask_jeevan"]}
-        self.assertEqual(seen_routes, PUBLIC_ROUTES)
+    def test_ask_jeevan_contract_covers_conversation_capabilities_and_routes(self) -> None:
+        seen_core_capabilities = {
+            scenario["expected"]["recommendations"][0]
+            for scenario in SCENARIOS["ask_jeevan"]
+            if scenario["expected"]["recommendations"]
+            and scenario["expected"]["recommendations"][0] in CORE_CAPABILITIES
+        }
+        self.assertEqual(seen_core_capabilities, CORE_CAPABILITIES)
+        seen_specialist_capabilities = {
+            scenario["expected"]["recommendations"][0]
+            for scenario in SCENARIOS["ask_jeevan"]
+            if scenario["expected"]["recommendations"]
+            and scenario["expected"]["recommendations"][0] not in CORE_CAPABILITIES
+        }
+        self.assertTrue(seen_specialist_capabilities)
+        self.assertTrue(
+            all(capability.startswith("$") for capability in seen_specialist_capabilities)
+        )
 
         for scenario in SCENARIOS["ask_jeevan"]:
             with self.subTest(scenario=scenario["name"]):
                 facts = scenario["facts"]
-                expected = scenario["expected_route"]
-                self.assertIn(expected, PUBLIC_ROUTES)
-                if facts.get("lifecycle_rule_change") or facts.get("live_wayfinding"):
-                    self.assertEqual(expected, "/navigate")
-                if facts.get("destination_uncertain"):
-                    self.assertEqual(expected, "/navigate")
-                if facts.get("controlled_public_identity") and not facts.get("live_wayfinding"):
-                    self.assertEqual(expected, "/manage-public-presence")
+                expected = scenario["expected"]
+                recommendations = expected["recommendations"]
+
+                self.assertTrue(scenario["message"].strip())
+                self.assertIn(
+                    expected["action"],
+                    {"conversation", "question", "recommend", "availability-gap"},
+                )
+                self.assertLessEqual(len(recommendations), 1)
+                self.assertEqual(expected["action"] == "recommend", len(recommendations) == 1)
+
+                if recommendations:
+                    self.assertIn(
+                        recommendations[0].removeprefix("$"),
+                        scenario["available_capabilities"],
+                    )
+
+                if facts.get("greeting") or facts.get("ordinary_question"):
+                    self.assertEqual(expected["action"], "conversation")
+                if facts.get("materially_ambiguous"):
+                    self.assertEqual(expected["action"], "question")
+                    self.assertNotIn("$navigate", recommendations)
+                if facts.get("lifecycle_rule_change") or facts.get("operational_wayfinding"):
+                    self.assertEqual(recommendations, ["$navigate"])
+                if facts.get("controlled_public_identity") and not facts.get("operational_wayfinding"):
+                    self.assertEqual(recommendations, ["$manage-public-presence"])
                 if facts.get("exact_revision_campaign") and not facts.get("lifecycle_rule_change"):
-                    self.assertEqual(expected, "/improve")
+                    self.assertEqual(recommendations, ["$improve"])
                 if facts.get("bounded_code_outcome") and len(facts) == 1:
-                    self.assertEqual(expected, "/ship")
+                    if "ship" in scenario["available_capabilities"]:
+                        self.assertEqual(recommendations, ["$ship"])
+                    else:
+                        self.assertEqual(expected["action"], "availability-gap")
+                        self.assertEqual(expected["named_route"], "/ship")
+                if facts.get("research_request"):
+                    if "research" in scenario["available_capabilities"]:
+                        self.assertEqual(recommendations, ["$research"])
+                    else:
+                        self.assertEqual(expected["action"], "availability-gap")
+                if facts.get("exploratory_idea"):
+                    self.assertEqual(recommendations, ["$grill-me"])
+                if facts.get("question_shaped"):
+                    self.assertEqual(expected["action"], "recommend")
 
     def test_navigate_scenarios_satisfy_frontier_invariants(self) -> None:
         allowed_actions = {"recommend", "establish-index", "resume", "create", "block", "question"}
@@ -134,6 +180,118 @@ class RoutingScenarioTests(unittest.TestCase):
                     self.assertEqual(scenario["mode"], "find")
                     self.assertTrue(query["continuity_warrants_index"])
                     self.assertTrue(query["task_creation_authorized"])
+
+    def test_conversation_task_locator_preserves_surface_and_search_bounds(self) -> None:
+        for scenario in SCENARIOS["conversation_task_locator"]:
+            with self.subTest(scenario=scenario["name"]):
+                request = scenario["request"]
+                requested_surface = request["surface"]
+                requested_partitions = request["partitions"]
+                requested_access = scenario["surface_access"].get(requested_surface, {})
+                accessible_partitions = [
+                    partition
+                    for partition in requested_partitions
+                    if requested_access.get(partition, False)
+                ]
+                expected = scenario["expected"]
+                calls = scenario["calls"]
+                tool_schema = scenario["tool_schema"]
+
+                for call in calls:
+                    self.assertEqual(
+                        call["surface"],
+                        requested_surface,
+                        "an adjacent native surface must never substitute for the requested one",
+                    )
+                    self.assertEqual(call["project"], request["project"])
+                    self.assertIn(call["partition"], accessible_partitions)
+                    if tool_schema["max_results"] is not None:
+                        self.assertLessEqual(call["limit"], tool_schema["max_results"])
+
+                successful_calls = [call for call in calls if "error" not in call["response"]]
+                queried_partitions = {call["partition"] for call in successful_calls}
+                self.assertTrue(
+                    set(accessible_partitions).issubset(queried_partitions),
+                    "every accessible requested partition must return at least one search result",
+                )
+                exhaustive_traversal_established = not request["all"]
+                if (
+                    request["all"]
+                    and tool_schema["supports_cursor"]
+                    and len(accessible_partitions) == len(requested_partitions)
+                ):
+                    exhaustive_traversal_established = True
+                    for partition in requested_partitions:
+                        partition_calls = [
+                            call for call in successful_calls if call["partition"] == partition
+                        ]
+                        if not partition_calls or partition_calls[0]["cursor"] is not None:
+                            exhaustive_traversal_established = False
+                            continue
+
+                        expected_cursor = None
+                        for call in partition_calls:
+                            if call["cursor"] != expected_cursor:
+                                exhaustive_traversal_established = False
+                            expected_cursor = call["response"]["next_cursor"]
+                        if expected_cursor is not None:
+                            exhaustive_traversal_established = False
+
+                if not accessible_partitions:
+                    self.assertEqual(expected["action"], "bounded-unavailable")
+                    self.assertEqual(calls, [])
+                    self.assertTrue(expected["partial"])
+                else:
+                    self.assertEqual(expected["action"], "report")
+                    self.assertEqual(
+                        expected["partial"],
+                        len(accessible_partitions) != len(requested_partitions)
+                        or (request["all"] and not exhaustive_traversal_established),
+                    )
+                    if (
+                        request["all"]
+                        and len(accessible_partitions) == len(requested_partitions)
+                        and not tool_schema["supports_cursor"]
+                    ):
+                        self.assertTrue(expected["partial"])
+
+                candidates = {candidate["id"]: candidate for candidate in scenario["candidates"]}
+                self.assertEqual(len(candidates), len(scenario["candidates"]))
+                for candidate in candidates.values():
+                    self.assertTrue(candidate["name"])
+                    self.assertNotEqual(candidate["name"], candidate["id"])
+                    self.assertTrue(candidate["match_evidence"]["text"].strip())
+                found_ids: list[str] = []
+                for call in successful_calls:
+                    for item_id in call["response"]["item_ids"]:
+                        self.assertIn(item_id, candidates)
+                        if item_id not in found_ids:
+                            found_ids.append(item_id)
+
+                direct_user_matches = [
+                    item_id
+                    for item_id in found_ids
+                    if candidates[item_id]["metadata_match"]
+                    and candidates[item_id]["match_evidence"]["role"] == "user"
+                    and candidates[item_id]["match_evidence"]["source"] == "native_message"
+                ]
+                if request["requires_explicit_user_message"]:
+                    self.assertEqual(expected["selected_ids"], direct_user_matches)
+                self.assertEqual(
+                    len(expected["selected_ids"]), len(set(expected["selected_ids"]))
+                )
+
+                for index, call in enumerate(calls):
+                    response = call["response"]
+                    if response.get("error") == "limit_exceeded":
+                        self.assertLess(index + 1, len(calls))
+                        corrected = calls[index + 1]
+                        self.assertEqual(corrected["surface"], call["surface"])
+                        self.assertEqual(corrected["project"], call["project"])
+                        self.assertEqual(corrected["partition"], call["partition"])
+                        self.assertEqual(corrected["cursor"], call["cursor"])
+                        self.assertLessEqual(corrected["limit"], response["max_results"])
+                        self.assertLess(corrected["limit"], call["limit"])
 
     def test_orchestrator_lifecycle_precedence(self) -> None:
         for scenario in SCENARIOS["orchestrator_precedence"]:

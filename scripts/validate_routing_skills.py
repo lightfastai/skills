@@ -155,11 +155,15 @@ def validate_family(validation: Validation) -> None:
     ask_routes = set(re.findall(r"`(/[a-z][a-z0-9-]*)`", texts["ask-jeevan"]))
     validation.require(
         ask_routes == set(ROUTES),
-        "ask-jeevan: public flow must contain exactly the four approved routes",
+        "ask-jeevan: public flow must contain exactly the four Lightfast core routes",
     )
     validation.require(
         "ask matt" not in texts["ask-jeevan"].lower() and "matt pocock" not in texts["ask-jeevan"].lower(),
         "ask-jeevan: upstream structural baselines must not become runtime dependencies",
+    )
+    validation.require(
+        "references/conversation-task-locator.md" in texts["navigate"],
+        "navigate: Find must point to the conversation and task locator contract",
     )
 
     scenario_text = read_text(SCENARIO_PATH, validation)
@@ -171,6 +175,7 @@ def validate_family(validation: Validation) -> None:
     required_scenario_groups = {
         "ask_jeevan",
         "navigate",
+        "conversation_task_locator",
         "orchestrator_precedence",
         "route_index",
         "route_index_history",
@@ -178,7 +183,7 @@ def validate_family(validation: Validation) -> None:
     }
     validation.require(
         required_scenario_groups.issubset(scenarios),
-        "routing scenarios must cover composed recommendations, frontier, precedence, Route Index, history, and returns",
+        "routing fixtures must cover advisory responses, locator surfaces, frontier, precedence, Route Index, history, and returns",
     )
     scenario_names = [
         scenario["name"]
@@ -212,7 +217,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Validated 5 public skill packages, 4 public routes, and the routing scenario contract.")
+    print("Validated 5 public skill packages, 4 core routes, and the deterministic routing contract fixtures.")
     return 0
 
 
