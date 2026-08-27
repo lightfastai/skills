@@ -36,6 +36,16 @@ class RoutingScenarioTests(unittest.TestCase):
             and scenario["expected"]["recommendations"][0] in CORE_CAPABILITIES
         }
         self.assertEqual(seen_core_capabilities, CORE_CAPABILITIES)
+        seen_specialist_capabilities = {
+            scenario["expected"]["recommendations"][0]
+            for scenario in SCENARIOS["ask_jeevan"]
+            if scenario["expected"]["recommendations"]
+            and scenario["expected"]["recommendations"][0] not in CORE_CAPABILITIES
+        }
+        self.assertTrue(seen_specialist_capabilities)
+        self.assertTrue(
+            all(capability.startswith("$") for capability in seen_specialist_capabilities)
+        )
 
         for scenario in SCENARIOS["ask_jeevan"]:
             with self.subTest(scenario=scenario["name"]):

@@ -47,10 +47,10 @@ This deterministic local check validates package metadata, invocation policy,
 the core route set, forbidden runtime lookup paths, README discovery, and
 advisory, lifecycle precedence, approval, and reconciliation invariants without binding them to generated wording. The
 fixtures are deterministic contract data with fake user messages and native
-surface call transcripts ready for later replay. They do not execute a model
-or prove behavioral quality. The opt-in third command uses the current Skills
-CLI to make a fresh copied installation, verify every source byte, and list all
-four installed packages. None of these checks adds a scheduled workflow.
+surface call transcripts. They do not execute a model or prove behavioral
+quality. The opt-in third command uses the current Skills CLI to make a fresh
+copied installation, verify every source byte, and list all four installed
+packages. None of these checks adds a scheduled workflow.
 
 ## Security
 

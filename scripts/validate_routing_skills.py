@@ -152,8 +152,8 @@ def validate_family(validation: Validation) -> None:
 
     ask_routes = set(re.findall(r"`(/[a-z][a-z0-9-]*)`", texts["ask-jeevan"]))
     validation.require(
-        set(ROUTES).issubset(ask_routes),
-        "ask-jeevan: public flow must contain every Lightfast core route",
+        ask_routes == set(ROUTES),
+        "ask-jeevan: public flow must contain exactly the three Lightfast core routes",
     )
     validation.require(
         "ask matt" not in texts["ask-jeevan"].lower() and "matt pocock" not in texts["ask-jeevan"].lower(),
@@ -168,7 +168,7 @@ def validate_family(validation: Validation) -> None:
         scenarios = {}
     required_scenario_groups = {
         "ask_jeevan",
-            "orchestrator_precedence",
+        "orchestrator_precedence",
         "return_events",
     }
     validation.require(
