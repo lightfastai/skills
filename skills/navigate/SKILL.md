@@ -28,7 +28,7 @@ Load only the selected mode reference.
 
 ## Query and destination boundary
 
-Ordinary downstream questions, meaningful progress, non-sensitive blockers, and results may return through the Query. Credentials, MFA, permission changes, and consequential approvals stay in the destination task where the governing context and evidence are visible.
+Ordinary downstream questions, meaningful progress, non-sensitive blockers, and results may return through the Query. Credentials, MFA, permission changes, scope expansion, and consequential approvals stay in the destination task where the governing context and evidence are visible.
 
 When a result returns, reconcile it against the Query's original intent and link the repository-native or system-native completion evidence. A destination task reporting done is an event to verify, not completion evidence by itself.
 
