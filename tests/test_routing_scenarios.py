@@ -62,6 +62,16 @@ class RoutingScenarioTests(unittest.TestCase):
             and scenario["expected"]["recommendations"][0] in CORE_CAPABILITIES
         }
         self.assertEqual(seen_core_capabilities, CORE_CAPABILITIES)
+        seen_specialist_capabilities = {
+            scenario["expected"]["recommendations"][0]
+            for scenario in SCENARIOS["ask_jeevan"]
+            if scenario["expected"]["recommendations"]
+            and scenario["expected"]["recommendations"][0] not in CORE_CAPABILITIES
+        }
+        self.assertTrue(seen_specialist_capabilities)
+        self.assertTrue(
+            all(capability.startswith("$") for capability in seen_specialist_capabilities)
+        )
 
         for scenario in SCENARIOS["ask_jeevan"]:
             with self.subTest(scenario=scenario["name"]):
@@ -198,38 +208,47 @@ class RoutingScenarioTests(unittest.TestCase):
                     if tool_schema["max_results"] is not None:
                         self.assertLessEqual(call["limit"], tool_schema["max_results"])
 
+                successful_calls = [call for call in calls if "error" not in call["response"]]
+                exhaustive_traversal_established = not request["all"]
+                if (
+                    request["all"]
+                    and tool_schema["supports_cursor"]
+                    and len(accessible_partitions) == len(requested_partitions)
+                ):
+                    exhaustive_traversal_established = True
+                    for partition in requested_partitions:
+                        partition_calls = [
+                            call for call in successful_calls if call["partition"] == partition
+                        ]
+                        if not partition_calls or partition_calls[0]["cursor"] is not None:
+                            exhaustive_traversal_established = False
+                            continue
+
+                        expected_cursor = None
+                        for call in partition_calls:
+                            if call["cursor"] != expected_cursor:
+                                exhaustive_traversal_established = False
+                            expected_cursor = call["response"]["next_cursor"]
+                        if expected_cursor is not None:
+                            exhaustive_traversal_established = False
+
                 if not accessible_partitions:
                     self.assertEqual(expected["action"], "bounded-unavailable")
                     self.assertEqual(calls, [])
                     self.assertTrue(expected["partial"])
                 else:
                     self.assertEqual(expected["action"], "report")
-                    pagination_bound = bool(
-                        request["all"] and not tool_schema["supports_cursor"]
-                    )
                     self.assertEqual(
                         expected["partial"],
                         len(accessible_partitions) != len(requested_partitions)
-                        or pagination_bound,
+                        or (request["all"] and not exhaustive_traversal_established),
                     )
-
-                successful_calls = [call for call in calls if "error" not in call["response"]]
-                if request["all"]:
-                    for partition in accessible_partitions:
-                        partition_calls = [
-                            call for call in successful_calls if call["partition"] == partition
-                        ]
-                        self.assertTrue(partition_calls)
-                        self.assertIsNone(partition_calls[0]["cursor"])
-                        if not tool_schema["supports_cursor"]:
-                            self.assertEqual(len(partition_calls), 1)
-                        for current, following in zip(partition_calls, partition_calls[1:]):
-                            self.assertTrue(tool_schema["supports_cursor"])
-                            self.assertIsNotNone(current["response"]["next_cursor"])
-                            self.assertEqual(
-                                following["cursor"], current["response"]["next_cursor"]
-                            )
-                        self.assertIsNone(partition_calls[-1]["response"]["next_cursor"])
+                    if (
+                        request["all"]
+                        and len(accessible_partitions) == len(requested_partitions)
+                        and not tool_schema["supports_cursor"]
+                    ):
+                        self.assertTrue(expected["partial"])
 
                 candidates = {candidate["id"]: candidate for candidate in scenario["candidates"]}
                 self.assertEqual(len(candidates), len(scenario["candidates"]))

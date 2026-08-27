@@ -604,7 +604,7 @@
   ],
   "conversation_task_locator": [
     {
-      "name": "Unavailable archived ChatGPT chats do not trigger a scan of 394 archived Codex tasks",
+      "name": "Unavailable archived ChatGPT chats do not trigger an adjacent Codex-task scan",
       "request": {
         "surface": "chatgpt_chat",
         "project": null,
@@ -619,8 +619,7 @@
           "archived": false
         },
         "codex_project_task": {
-          "archived": true,
-          "candidate_count": 394
+          "archived": true
         }
       },
       "tool_schema": {
@@ -636,19 +635,21 @@
       }
     },
     {
-      "name": "Accessible cursorless surface remains partial for an exhaustive request",
+      "name": "All accessible partitions remain partial when pagination is unavailable",
       "request": {
         "surface": "chatgpt_chat",
         "project": null,
         "partitions": [
-          "active"
+          "active",
+          "archived"
         ],
         "all": true,
         "requires_explicit_user_message": true
       },
       "surface_access": {
         "chatgpt_chat": {
-          "active": true
+          "active": true,
+          "archived": true
         }
       },
       "tool_schema": {
@@ -668,6 +669,19 @@
             ],
             "next_cursor": null
           }
+        },
+        {
+          "surface": "chatgpt_chat",
+          "project": null,
+          "partition": "archived",
+          "cursor": null,
+          "limit": 100,
+          "response": {
+            "item_ids": [
+              "chat-archived-9"
+            ],
+            "next_cursor": null
+          }
         }
       ],
       "candidates": [
@@ -680,12 +694,23 @@
             "source": "native_message",
             "text": "I want continuity to preserve my recent decisions."
           }
+        },
+        {
+          "id": "chat-archived-9",
+          "name": "Archived continuity chat",
+          "metadata_match": true,
+          "match_evidence": {
+            "role": "user",
+            "source": "native_message",
+            "text": "These archived decisions should remain discoverable."
+          }
         }
       ],
       "expected": {
         "action": "report",
         "selected_ids": [
-          "chat-active-4"
+          "chat-active-4",
+          "chat-archived-9"
         ],
         "partial": true
       }
