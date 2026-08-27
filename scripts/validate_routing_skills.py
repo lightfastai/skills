@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -24,8 +25,8 @@ PUBLIC_SKILLS = (
     "manage-public-presence",
 )
 ROUTING_SKILLS = PUBLIC_SKILLS[:-1]
-NAVIGATE_REFERENCES = ("find-route.md", "advance-route.md")
 INSTALL_COMMAND = f"npx skills add lightfastai/skills --skill {' '.join(PUBLIC_SKILLS)}"
+SCENARIO_PATH = ROOT / "tests" / "routing_scenarios.json"
 
 
 class Validation:
@@ -100,7 +101,11 @@ def parse_openai_yaml(path: Path, validation: Validation) -> dict[str, str | boo
 
 
 def validate_links(path: Path, text: str, validation: Validation) -> None:
-    for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", text):
+    prose = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", prose):
+        target = target.strip()
+        if target.startswith("<") and target.endswith(">"):
+            target = target[1:-1]
         if re.match(r"^[a-z]+://", target):
             continue
         resolved = (path.parent / target.split("#", 1)[0]).resolve()
@@ -147,20 +152,42 @@ def validate_skill(name: str, validation: Validation) -> tuple[str, dict[str, st
 def validate_family(validation: Validation) -> None:
     texts = {name: validate_skill(name, validation)[0] for name in PUBLIC_SKILLS}
 
-    ask_rows = dict(
-        re.findall(r"^\| `(/[^`]+)` \|.*\| `(\$[^`]+)` \|$", texts["ask-jeevan"], re.MULTILINE)
+    ask_routes = set(re.findall(r"`(/[a-z][a-z0-9-]*)`", texts["ask-jeevan"]))
+    validation.require(
+        ask_routes == set(ROUTES),
+        "ask-jeevan: public flow must contain exactly the four approved routes",
     )
-    validation.require(ask_rows == ROUTES, "ask-jeevan: v1 route map or next invocations differ from the approved four routes")
+    validation.require(
+        "ask matt" not in texts["ask-jeevan"].lower() and "matt pocock" not in texts["ask-jeevan"].lower(),
+        "ask-jeevan: upstream structural baselines must not become runtime dependencies",
+    )
 
-    navigate_dir = SKILLS_ROOT / "navigate"
-    reference_paths = [navigate_dir / "references" / name for name in NAVIGATE_REFERENCES]
-    for path in reference_paths:
-        reference_text = read_text(path, validation)
-        validate_links(path, reference_text, validation)
-        validation.require(
-            f"references/{path.name}" in texts["navigate"],
-            f"navigate: {path.name} is not disclosed from SKILL.md",
-        )
+    scenario_text = read_text(SCENARIO_PATH, validation)
+    try:
+        scenarios = json.loads(scenario_text) if scenario_text else {}
+    except json.JSONDecodeError as error:
+        validation.errors.append(f"{SCENARIO_PATH.relative_to(ROOT)}: invalid JSON: {error}")
+        scenarios = {}
+    required_scenario_groups = {
+        "ask_jeevan",
+        "navigate",
+        "orchestrator_precedence",
+        "route_index",
+        "route_index_history",
+        "return_events",
+    }
+    validation.require(
+        required_scenario_groups.issubset(scenarios),
+        "routing scenarios must cover composed recommendations, frontier, precedence, Route Index, history, and returns",
+    )
+    scenario_names = [
+        scenario["name"]
+        for group, values in scenarios.items()
+        if group != "route_index_history" and isinstance(values, list)
+        for scenario in values
+        if isinstance(scenario, dict) and "name" in scenario
+    ]
+    validation.require(len(scenario_names) == len(set(scenario_names)), "routing scenario names must be unique")
 
     runtime_docs = [SKILLS_ROOT / name / "SKILL.md" for name in ROUTING_SKILLS]
     for name in ROUTING_SKILLS:
@@ -185,7 +212,7 @@ def main() -> int:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print("Validated 5 public skill packages, 4 public routes, and 2 Navigate mode references.")
+    print("Validated 5 public skill packages, 4 public routes, and the routing scenario contract.")
     return 0
 
 
