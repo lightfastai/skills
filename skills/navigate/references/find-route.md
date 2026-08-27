@@ -4,20 +4,13 @@ Use this mode when the Query needs one live destination rather than an effect.
 
 ## Find
 
-1. Restate the bounded routing need from the Query: desired outcome, target scope, exclusions, consequential effects, and whether the user is asking for advice or execution. The need is bounded when a destination can decide admission without inheriting an unrelated objective or implicit scope.
-2. Discover current candidates from the surfaces available in this environment:
-   - installed skill names, descriptions, and invocation policies;
-   - live Codex tasks and conversations, including source-task relationships;
-   - connected projects, repository hosts, and repository instructions;
-   - available systems, apps, plugins, and provider capabilities; and
-   - public Orchestrator adapters and their live destination repositories.
-3. Read only the metadata or instructions needed to distinguish plausible candidates. For work that designs or changes Orchestrator lifecycle rules, verify the live `lightfastai/orchestrator` repository as the destination; route a bounded evaluation or authorized improvement campaign for one exact Orchestrator revision through the live `improve` adapter. Do not use the Workbench or Map as a runtime registry.
-4. Select one route using this order of evidence:
-   - compatible in-flight work with the same objective, scope, and authority;
+1. Determine whether the Query asks for advice or execution. Its routing need is bounded when a destination can decide admission without inheriting an unrelated objective or implicit scope.
+2. Gather plausible candidates from the current native surfaces covered by the shared routing contract. Read only the metadata or instructions needed to distinguish them.
+3. Apply the shared continuation-first preference, then select one route from:
    - a specific installed skill or adapter whose admission fits;
-   - the native project, repository, or system that owns the requested outcome;
+   - the native project, repository, or system that owns the requested outcome; or
    - one indispensable routing question when materially different choices remain.
-5. Reject candidates that require a scope expansion, consequential effect, unavailable authority, or silent substitution. An unavailable optional candidate is a route-specific blocker, not permission to emulate it.
+4. Exclude candidates that require scope expansion, a consequential effect, unavailable authority, or silent substitution. An unavailable optional candidate is a route-specific blocker, not permission to emulate it.
 
 ## Finish
 
