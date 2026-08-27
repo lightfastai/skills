@@ -15,7 +15,7 @@ This skill is a stateless, recommendation-only index. Use only the originating c
 | `/improve` | A bounded campaign should evaluate an exact Orchestrator revision and reach an evidence or improvement disposition. | `$improve` |
 | `/manage-public-presence` | A controlled public identity needs an audit, setup, correction, deployment, reindexing, or monitoring. | `$manage-public-presence` |
 
-Choose the closest specific route. Prefer `/ship`, `/improve`, or `/manage-public-presence` when the request already meets that route's footing. Preserve the user's objective, scope, exclusions, and approval boundaries in the suggested prompt.
+Choose the closest specific route. Refer Orchestrator lifecycle-rule changes to the lifecycle authority; otherwise prefer `/ship`, `/improve`, or `/manage-public-presence` when the request already meets that route's footing. Preserve the user's objective, scope, exclusions, and approval boundaries in the suggested prompt.
 
 ## Response contract
 
