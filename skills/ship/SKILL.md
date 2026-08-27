@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Route a bounded code-delivery outcome to the standalone Lightfast Ship Orchestrator and resume compatible shipping work. Use when code must reach a target repository's own completion boundary; not for route advice or Orchestrator evaluation.
+description: Route a bounded code-delivery outcome to the standalone Lightfast Ship Orchestrator and resume compatible shipping work. Use when code must reach a target repository's own completion boundary; not for route advice, Orchestrator evaluation, or lifecycle-rule changes.
 ---
 
 # Ship
@@ -18,7 +18,7 @@ Use this route when the Query supplies or can resolve:
 - material constraints and exclusions; and
 - every requested consequential effect, such as deployment, production change, release, publication, migration, destructive action, paid execution, or permission expansion.
 
-The target repository defines completion. A request for advice only, an unbounded product objective, or an Orchestrator evaluation campaign does not enter `ship`. Return one indispensable ordinary question through the Query when outcome or target scope cannot be bounded.
+The target repository defines completion. A request for advice only, an unbounded product objective, an Orchestrator evaluation campaign, or work that designs or changes Orchestrator lifecycle rules does not enter `ship`. Route lifecycle-rule work through `navigate` so the actual lifecycle authority receives it. Return one indispensable ordinary question through the Query when outcome or target scope cannot be bounded.
 
 ## Destination discovery
 
