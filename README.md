@@ -6,6 +6,7 @@ Agent skills published by Lightfast. Compatible with the [Agent Skills](https://
 
 | Skill | Purpose |
 |---|---|
+| [`communicate-as-lightfast`](skills/communicate-as-lightfast/) | Develop evidence-grounded Lightfast company articles, research and method explanations, product communication, X posts and threads, with annotated public craft examples. |
 | [`ask-jeevan`](skills/ask-jeevan/) | Explicit-only, stateless advice across available project capabilities and Lightfast core routes. |
 | [`ship`](skills/ship/) | Hand a bounded code-delivery outcome to the authoritative `ship` Orchestrator task. |
 | [`improve`](skills/improve/) | Hand an exact-revision Orchestrator improvement campaign to the authoritative `improve` task. |
@@ -21,6 +22,14 @@ npx skills add lightfastai/skills --skill ask-jeevan ship improve manage-public-
 
 To install a single skill, keep only its name after `--skill`. Optional project
 capabilities remain separately installed and discoverable by `$ask-jeevan`.
+
+Install the communication skill separately:
+
+```bash
+npx skills add lightfastai/skills --skill communicate-as-lightfast
+```
+
+For a local checkout, the official CLI also accepts a local source path. Select only the required skill and target agent; use project scope unless a global installation is intended.
 
 ## Discovery and invocation
 

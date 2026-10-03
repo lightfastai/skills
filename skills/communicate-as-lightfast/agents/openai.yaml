@@ -1,0 +1,4 @@
+interface:
+  display_name: "Communicate as Lightfast"
+  short_description: "Develop evidence-grounded Lightfast articles and posts"
+  default_prompt: "Use $communicate-as-lightfast to develop this evidence into a clear company article or social post."
